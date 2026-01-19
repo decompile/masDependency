@@ -42,7 +42,7 @@ story_location: D:\work\masDependencyMap\_bmad-output\implementation-artifacts
 development_status:
   epic-1: in-progress
   1-1-initialize-net-8-solution-structure: done
-  1-2-install-core-nuget-dependencies: review
+  1-2-install-core-nuget-dependencies: done
   1-3-implement-basic-cli-with-system-commandline: backlog
   1-4-implement-configuration-management-with-json-support: backlog
   1-5-set-up-dependency-injection-container: backlog

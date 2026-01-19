@@ -1,6 +1,6 @@
 # Story 1.2: Install Core NuGet Dependencies
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -443,8 +443,47 @@ No debug issues encountered. All package installations completed successfully.
 - Spectre.Console v0.54.0 (exact) ✅
 - All other packages: Latest stable for .NET 8 ✅
 
+**Package Verification (dotnet list package):**
+```
+Core: 4 packages installed
+CLI: 5 packages installed
+Tests: 6 packages installed (2 added + 4 from template)
+All requested versions match resolved versions ✅
+```
+
+**Security Check (dotnet list package --vulnerable):**
+```
+No vulnerable packages detected in any project ✅
+Sources checked: nuget.org, local SDK packages
+```
+
+**Key Transitive Dependencies:**
+- Microsoft.CodeAnalysis.Common v5.0.0 (via CodeAnalysis.CSharp.Workspaces)
+- System.Collections.Immutable v9.0.0 (via Roslyn)
+- System.Composition.* v9.0.0 (MEF for Roslyn workspaces)
+- Microsoft.Extensions.Configuration.Abstractions v10.0.2 (via Configuration.Json)
+- Microsoft.Extensions.Logging.Abstractions v10.0.2 (via Logging.Console)
+- Castle.Core v5.1.1 (via Moq for dynamic proxies)
+- No version conflicts detected ✅
+
+**Build Verification Evidence:**
+```
+Command: dotnet restore
+Result: All projects restored successfully, all packages resolved
+
+Command: dotnet build
+Result: Build succeeded
+  - MasDependencyMap.Core -> bin\Debug\net8.0\MasDependencyMap.Core.dll
+  - MasDependencyMap.CLI -> bin\Debug\net8.0\MasDependencyMap.CLI.dll
+  - MasDependencyMap.Core.Tests -> bin\Debug\net8.0\MasDependencyMap.Core.Tests.dll
+  - 0 Warning(s)
+  - 0 Error(s)
+  - Time Elapsed: ~3 seconds
+```
+
 ### File List
 
 - src/MasDependencyMap.Core/MasDependencyMap.Core.csproj (modified - added 4 PackageReference entries)
 - src/MasDependencyMap.CLI/MasDependencyMap.CLI.csproj (modified - added 5 PackageReference entries)
 - tests/MasDependencyMap.Core.Tests/MasDependencyMap.Core.Tests.csproj (modified - added 2 PackageReference entries)
+- .claude/settings.local.json (modified - added bash command permissions for dotnet and git commands)
