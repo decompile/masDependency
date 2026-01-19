@@ -1,0 +1,26 @@
+# Product Brief: masDependencyMap
+
+## Table of Contents
+
+- [Product Brief: masDependencyMap](#table-of-contents)
+  - [Executive Summary](./executive-summary.md)
+  - [Core Vision](./core-vision.md)
+    - [Problem Statement](./core-vision.md#problem-statement)
+    - [Problem Impact](./core-vision.md#problem-impact)
+    - [Why Existing Solutions Fall Short](./core-vision.md#why-existing-solutions-fall-short)
+    - [Proposed Solution](./core-vision.md#proposed-solution)
+    - [Key Differentiators](./core-vision.md#key-differentiators)
+  - [Target Users](./target-users.md)
+    - [Primary Users](./target-users.md#primary-users)
+    - [Secondary Users](./target-users.md#secondary-users)
+    - [User Journey](./target-users.md#user-journey)
+  - [Success Metrics](./success-metrics.md)
+    - [User Success Metrics](./success-metrics.md#user-success-metrics)
+    - [Business Objectives](./success-metrics.md#business-objectives)
+    - [Key Performance Indicators](./success-metrics.md#key-performance-indicators)
+  - [MVP Scope](./mvp-scope.md)
+    - [Core Features](./mvp-scope.md#core-features)
+    - [Technical Architecture](./mvp-scope.md#technical-architecture)
+    - [Out of Scope for MVP](./mvp-scope.md#out-of-scope-for-mvp)
+    - [MVP Success Criteria](./mvp-scope.md#mvp-success-criteria)
+    - [Future Vision](./mvp-scope.md#future-vision)
