@@ -1,0 +1,11 @@
+{
+  "FrameworkFilters": {
+    "BlockList": [
+      "Microsoft.*",
+      "System.*",
+      "mscorlib",
+      "netstandard"
+    ],
+    "AllowList": []
+  }
+}

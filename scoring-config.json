@@ -1,0 +1,8 @@
+{
+  "ScoringWeights": {
+    "Coupling": 0.40,
+    "Complexity": 0.30,
+    "TechDebt": 0.20,
+    "ExternalExposure": 0.10
+  }
+}
