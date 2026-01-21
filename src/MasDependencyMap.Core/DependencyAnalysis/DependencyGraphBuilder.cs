@@ -17,6 +17,13 @@ public class DependencyGraphBuilder : IDependencyGraphBuilder
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
+    /// <summary>
+    /// Builds a dependency graph from solution analysis.
+    /// This is a stub implementation that will be completed in Epic 2.
+    /// </summary>
+    /// <param name="solutionAnalysis">Solution analysis result from ISolutionLoader</param>
+    /// <returns>Dependency graph suitable for cycle detection and visualization</returns>
+    /// <exception cref="NotImplementedException">Always thrown - stub implementation deferred to Epic 2 Story 2-5</exception>
     public Task<object> BuildGraphAsync(object solutionAnalysis)
     {
         _logger.LogWarning("DependencyGraphBuilder.BuildGraphAsync is a stub implementation");

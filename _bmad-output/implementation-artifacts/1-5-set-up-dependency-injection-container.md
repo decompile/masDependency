@@ -1,6 +1,6 @@
 # Story 1.5: Set Up Dependency Injection Container
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -949,6 +949,43 @@ Claude Sonnet 4.5 (claude-sonnet-4-5-20250929)
 - ✅ All Core service interfaces registered (ISolutionLoader, IGraphvizRenderer, IDependencyGraphBuilder)
 - ✅ Service lifetimes correctly set (Singleton for stateless services)
 - ✅ DI container successfully resolves all dependencies without runtime errors
+
+### Code Review Fixes Applied
+
+🔍 **Adversarial Code Review (claude-sonnet-4-5-20250929):**
+
+**Issues Found:** 1 High, 2 Medium, 1 Low
+
+**HIGH Issues Fixed:**
+1. ✅ **TryAdd Pattern Not Used** - Changed `AddSingleton<>()` to `TryAddSingleton<>()` for all Core service registrations per project-context.md line 217
+   - Added `using Microsoft.Extensions.DependencyInjection.Extensions;`
+   - Allows test overrides of services
+   - Location: Program.cs:56-58
+
+**MEDIUM Issues Fixed:**
+2. ✅ **Mutable Collection Property** - Changed `SolutionAnalysis.ProjectNames` from `{ get; set; }` to `{ get; init; }`
+   - Prevents external mutation after object initialization
+   - Better encapsulation for DTO/POCO classes
+   - Location: SolutionAnalysis.cs:15
+
+3. ✅ **Missing Exception Documentation** - Added `<exception>` XML tags to all stub implementations
+   - RoslynSolutionLoader.LoadAsync: Documents NotImplementedException
+   - GraphvizRenderer.RenderToFileAsync: Documents NotImplementedException
+   - DependencyGraphBuilder.BuildGraphAsync: Documents NotImplementedException
+   - Added full XML documentation to stub methods (summary, param, returns, exception)
+   - Complies with project-context.md lines 170-184
+
+**LOW Issues Fixed:**
+4. ✅ **Verbose DI Validation Message** - Removed "[dim]✓ DI container validated successfully[/]" output
+   - DI validation still runs, just silent on success
+   - Reduces CLI output noise for script usage
+   - Location: Program.cs:99
+
+**Verification:**
+- ✅ Build succeeded: 0 warnings, 0 errors
+- ✅ All tests pass: 1/1 passed
+- ✅ CLI functionality verified: --help, --version work correctly
+- ✅ DI container still validates successfully (silently)
 
 ### File List
 

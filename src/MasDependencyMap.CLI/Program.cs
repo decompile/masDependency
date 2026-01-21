@@ -5,6 +5,7 @@ using MasDependencyMap.Core.Visualization;
 using Microsoft.Build.Locator;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Spectre.Console;
@@ -53,9 +54,10 @@ public class Program
         });
 
         // Register Core service interfaces (Singleton lifetime for stateless services)
-        services.AddSingleton<ISolutionLoader, RoslynSolutionLoader>();
-        services.AddSingleton<IGraphvizRenderer, GraphvizRenderer>();
-        services.AddSingleton<IDependencyGraphBuilder, DependencyGraphBuilder>();
+        // Use TryAdd pattern to allow test overrides per project-context.md line 217
+        services.TryAddSingleton<ISolutionLoader, RoslynSolutionLoader>();
+        services.TryAddSingleton<IGraphvizRenderer, GraphvizRenderer>();
+        services.TryAddSingleton<IDependencyGraphBuilder, DependencyGraphBuilder>();
 
         // Register FilterConfiguration with validation
         services
@@ -95,8 +97,6 @@ public class Program
             _ = serviceProvider.GetRequiredService<IGraphvizRenderer>();
             _ = serviceProvider.GetRequiredService<IDependencyGraphBuilder>();
             _ = serviceProvider.GetRequiredService<ILogger<Program>>();
-
-            ansiConsoleEarly.MarkupLine("[dim]✓ DI container validated successfully[/]");
         }
         catch (OptionsValidationException ex)
         {

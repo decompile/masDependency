@@ -17,6 +17,13 @@ public class RoslynSolutionLoader : ISolutionLoader
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
+    /// <summary>
+    /// Loads a solution file and analyzes project dependencies.
+    /// This is a stub implementation that will be completed in Epic 2.
+    /// </summary>
+    /// <param name="solutionPath">Absolute path to .sln file</param>
+    /// <returns>Solution analysis with project dependency information</returns>
+    /// <exception cref="NotImplementedException">Always thrown - stub implementation deferred to Epic 2 Story 2-1</exception>
     public Task<SolutionAnalysis> LoadAsync(string solutionPath)
     {
         _logger.LogWarning("RoslynSolutionLoader is a stub implementation");

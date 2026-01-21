@@ -12,5 +12,5 @@ public class SolutionAnalysis
     /// List of projects found in the solution.
     /// Minimal structure for MVP DI setup.
     /// </summary>
-    public List<string> ProjectNames { get; set; } = new();
+    public List<string> ProjectNames { get; init; } = new();
 }

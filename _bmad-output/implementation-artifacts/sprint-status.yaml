@@ -45,7 +45,7 @@ development_status:
   1-2-install-core-nuget-dependencies: done
   1-3-implement-basic-cli-with-system-commandline: done
   1-4-implement-configuration-management-with-json-support: done
-  1-5-set-up-dependency-injection-container: review
+  1-5-set-up-dependency-injection-container: done
   1-6-implement-structured-logging-with-microsoft-extensions-logging: backlog
   1-7-create-sample-solution-for-testing: backlog
   1-8-create-readme-and-user-documentation: backlog
