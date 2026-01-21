@@ -38,6 +38,7 @@ public class GraphvizRenderer : IGraphvizRenderer
     /// <exception cref="NotImplementedException">Always thrown - stub implementation deferred to Epic 2 Story 2-9</exception>
     public Task<string> RenderToFileAsync(string dotFilePath, string outputFormat)
     {
+        _logger.LogInformation("Rendering {DotFilePath} to {OutputFormat} format", dotFilePath, outputFormat);
         _logger.LogWarning("GraphvizRenderer.RenderToFileAsync is a stub implementation");
         throw new NotImplementedException(
             "Graphviz rendering will be implemented in Epic 2 Story 2-9. " +

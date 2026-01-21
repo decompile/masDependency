@@ -37,16 +37,77 @@ public class Program
             .AddJsonFile("scoring-config.json", optional: true, reloadOnChange: false)
             .Build();
 
+        // Define commands and options BEFORE building ServiceProvider to enable early parsing
+        var rootCommand = new RootCommand("masDependencyMap - .NET dependency analysis tool");
+
+        // Add --version option (available globally via Recursive flag)
+        var versionOption = new Option<bool>("--version")
+        {
+            Description = "Show version information",
+            Recursive = true
+        };
+        rootCommand.Add(versionOption);
+
+        // Define options for analyze command
+        var solutionOption = new Option<FileInfo?>("--solution")
+        {
+            Description = "Path to .sln file (required)"
+        };
+
+        var outputOption = new Option<DirectoryInfo?>("--output")
+        {
+            Description = "Output directory (default: current directory)"
+        };
+
+        var configOption = new Option<FileInfo?>("--config")
+        {
+            Description = "Path to filter/scoring configuration file"
+        };
+
+        var reportsOption = new Option<string?>("--reports")
+        {
+            Description = "Report types to generate: text|csv|all (default: all)",
+            DefaultValueFactory = parseResult => "all"
+        };
+
+        var formatOption = new Option<string?>("--format")
+        {
+            Description = "Output format: png|svg|both (default: both)",
+            DefaultValueFactory = parseResult => "both"
+        };
+
+        var verboseOption = new Option<bool>("--verbose")
+        {
+            Description = "Enable detailed logging"
+        };
+
+        // Create analyze command
+        var analyzeCommand = new Command("analyze", "Analyze solution dependencies")
+        {
+            solutionOption,
+            outputOption,
+            configOption,
+            reportsOption,
+            formatOption,
+            verboseOption
+        };
+
+        rootCommand.Subcommands.Add(analyzeCommand);
+
+        // Parse args EARLY to extract --verbose flag BEFORE building ServiceProvider
+        var parseResult = rootCommand.Parse(args);
+        var verbose = parseResult.GetValue(verboseOption);
+
         // Set up DI container
         var services = new ServiceCollection();
         services.AddSingleton<IAnsiConsole>(AnsiConsole.Console);
         services.AddSingleton<IConfiguration>(configuration);
 
-        // Register logging services
+        // Register logging services with DYNAMIC log level based on --verbose flag
         services.AddLogging(builder =>
         {
             builder.AddConsole();
-            builder.SetMinimumLevel(LogLevel.Warning); // Default to Warning, will add --verbose flag later
+            builder.SetMinimumLevel(verbose ? LogLevel.Debug : LogLevel.Warning);
 
             // Filter out noisy Microsoft/System logs
             builder.AddFilter("Microsoft", LogLevel.Error);
@@ -116,65 +177,11 @@ public class Program
             return 1;
         }
 
-        // Create root command
-        var rootCommand = new RootCommand("masDependencyMap - .NET dependency analysis tool");
-
-        // Add --version option (available globally via Recursive flag)
-        var versionOption = new Option<bool>("--version")
-        {
-            Description = "Show version information",
-            Recursive = true
-        };
-        rootCommand.Add(versionOption);
-
-        // Define options for analyze command
-        var solutionOption = new Option<FileInfo?>("--solution")
-        {
-            Description = "Path to .sln file (required)"
-        };
-
-        var outputOption = new Option<DirectoryInfo?>("--output")
-        {
-            Description = "Output directory (default: current directory)"
-        };
-
-        var configOption = new Option<FileInfo?>("--config")
-        {
-            Description = "Path to filter/scoring configuration file"
-        };
-
-        var reportsOption = new Option<string?>("--reports")
-        {
-            Description = "Report types to generate: text|csv|all (default: all)",
-            DefaultValueFactory = parseResult => "all"
-        };
-
-        var formatOption = new Option<string?>("--format")
-        {
-            Description = "Output format: png|svg|both (default: both)",
-            DefaultValueFactory = parseResult => "both"
-        };
-
-        var verboseOption = new Option<bool>("--verbose")
-        {
-            Description = "Enable detailed logging"
-        };
-
-        // Create analyze command
-        var analyzeCommand = new Command("analyze", "Analyze solution dependencies")
-        {
-            solutionOption,
-            outputOption,
-            configOption,
-            reportsOption,
-            formatOption,
-            verboseOption
-        };
-
         // Set up action for analyze command
         analyzeCommand.SetAction(async (parseResult, cancellationToken) =>
         {
             var ansiConsole = serviceProvider.GetRequiredService<IAnsiConsole>();
+            var logger = serviceProvider.GetRequiredService<ILogger<Program>>();
 
             // Check for --version flag
             if (parseResult.GetValue(versionOption))
@@ -190,6 +197,10 @@ public class Program
             var reports = parseResult.GetValue(reportsOption);
             var format = parseResult.GetValue(formatOption);
             var verbose = parseResult.GetValue(verboseOption);
+
+            // Example structured logging (visible with --verbose flag only)
+            logger.LogInformation("Analyze command invoked with solution: {SolutionPath}", solution?.FullName ?? "N/A");
+            logger.LogDebug("Configuration - Reports: {Reports}, Format: {Format}", reports ?? "N/A", format ?? "N/A");
 
             // Validate required option
             if (solution == null)
@@ -235,9 +246,6 @@ public class Program
             // No command specified, should not reach here as help will be shown automatically
             return await Task.FromResult(0);
         });
-
-        // Add analyze command to root
-        rootCommand.Subcommands.Add(analyzeCommand);
 
         // Execute command
         // Note: System.CommandLine 2.0.2 API uses Invoke(), wrapped in Task for async Main compatibility

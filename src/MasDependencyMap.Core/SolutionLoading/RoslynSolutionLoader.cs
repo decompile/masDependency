@@ -26,6 +26,7 @@ public class RoslynSolutionLoader : ISolutionLoader
     /// <exception cref="NotImplementedException">Always thrown - stub implementation deferred to Epic 2 Story 2-1</exception>
     public Task<SolutionAnalysis> LoadAsync(string solutionPath)
     {
+        _logger.LogInformation("Attempting to load solution from {SolutionPath}", solutionPath);
         _logger.LogWarning("RoslynSolutionLoader is a stub implementation");
         throw new NotImplementedException(
             "Solution loading will be implemented in Epic 2 Story 2-1. " +

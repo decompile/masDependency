@@ -26,6 +26,7 @@ public class DependencyGraphBuilder : IDependencyGraphBuilder
     /// <exception cref="NotImplementedException">Always thrown - stub implementation deferred to Epic 2 Story 2-5</exception>
     public Task<object> BuildGraphAsync(object solutionAnalysis)
     {
+        _logger.LogDebug("Building dependency graph from solution analysis");
         _logger.LogWarning("DependencyGraphBuilder.BuildGraphAsync is a stub implementation");
         throw new NotImplementedException(
             "Dependency graph building will be implemented in Epic 2 Story 2-5. " +
