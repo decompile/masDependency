@@ -1,7 +1,11 @@
 using MasDependencyMap.Core.Configuration;
+using MasDependencyMap.Core.DependencyAnalysis;
+using MasDependencyMap.Core.SolutionLoading;
+using MasDependencyMap.Core.Visualization;
 using Microsoft.Build.Locator;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Spectre.Console;
 using System.CommandLine;
@@ -37,6 +41,22 @@ public class Program
         services.AddSingleton<IAnsiConsole>(AnsiConsole.Console);
         services.AddSingleton<IConfiguration>(configuration);
 
+        // Register logging services
+        services.AddLogging(builder =>
+        {
+            builder.AddConsole();
+            builder.SetMinimumLevel(LogLevel.Warning); // Default to Warning, will add --verbose flag later
+
+            // Filter out noisy Microsoft/System logs
+            builder.AddFilter("Microsoft", LogLevel.Error);
+            builder.AddFilter("System", LogLevel.Error);
+        });
+
+        // Register Core service interfaces (Singleton lifetime for stateless services)
+        services.AddSingleton<ISolutionLoader, RoslynSolutionLoader>();
+        services.AddSingleton<IGraphvizRenderer, GraphvizRenderer>();
+        services.AddSingleton<IDependencyGraphBuilder, DependencyGraphBuilder>();
+
         // Register FilterConfiguration with validation
         services
             .AddOptions<FilterConfiguration>()
@@ -69,6 +89,14 @@ public class Program
             ansiConsoleEarly.MarkupLine($"[dim]  Blocklist patterns:[/] {filterConfig.BlockList.Count}");
             ansiConsoleEarly.MarkupLine($"[dim]  Allowlist patterns:[/] {filterConfig.AllowList.Count}");
             ansiConsoleEarly.MarkupLine($"[dim]  Scoring weights:[/] C={scoringConfig.Coupling:F2}, Cx={scoringConfig.Complexity:F2}, TD={scoringConfig.TechDebt:F2}, EE={scoringConfig.ExternalExposure:F2}");
+
+            // Validate DI container can resolve all critical services
+            _ = serviceProvider.GetRequiredService<ISolutionLoader>();
+            _ = serviceProvider.GetRequiredService<IGraphvizRenderer>();
+            _ = serviceProvider.GetRequiredService<IDependencyGraphBuilder>();
+            _ = serviceProvider.GetRequiredService<ILogger<Program>>();
+
+            ansiConsoleEarly.MarkupLine("[dim]✓ DI container validated successfully[/]");
         }
         catch (OptionsValidationException ex)
         {
@@ -78,6 +106,13 @@ public class Program
             {
                 ansiConsoleEarly.MarkupLine($"[dim]  - {failure}[/]");
             }
+            return 1;
+        }
+        catch (InvalidOperationException ex)
+        {
+            ansiConsoleEarly.MarkupLine("[red]Error:[/] DI container validation failed");
+            ansiConsoleEarly.MarkupLine($"[dim]Reason:[/] {ex.Message}");
+            ansiConsoleEarly.MarkupLine("[dim]Suggestion:[/] Check service registrations in Program.cs");
             return 1;
         }
 
