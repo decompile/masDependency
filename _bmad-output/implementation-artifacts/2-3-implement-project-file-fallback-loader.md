@@ -1,6 +1,6 @@
 # Story 2.3: Implement Project File Fallback Loader
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -59,7 +59,7 @@ So that analysis continues even when MSBuild fails.
   - [x] Extract <Reference Include="AssemblyName, Version=..."> elements (legacy format)
   - [x] Filter framework assemblies using IsFrameworkAssembly() pattern from Story 2-1
   - [x] Create ProjectReference with Type = AssemblyReference
-  - [x] Handle packages.config references (legacy NuGet format)
+  - [ ] Handle packages.config references (legacy NuGet format) - NOT IMPLEMENTED (deferred)
 
 - [x] Extract project metadata from XML (AC: Basic project information)
   - [x] Extract project name from file path (Path.GetFileNameWithoutExtension)
@@ -221,10 +221,10 @@ private IEnumerable<string> ParseSolutionFile(string solutionPath)
         {
             // Parse: Project("{GUID}") = "Name", "Path\To\Project.csproj", "{GUID}"
             var parts = line.Split(new[] { '\"' }, StringSplitOptions.RemoveEmptyEntries);
-            if (parts.Length >= 5)
+            if (parts.Length >= 6)
             {
-                var projectPath = parts[3]; // Path is in 4th quoted section
-                var projectGuid = parts[1]; // Project type GUID is in 2nd quoted section
+                var projectGuid = parts[1]; // Project type GUID is at index 1
+                var projectPath = parts[5]; // Project path is at index 5
 
                 // Skip solution folders: {2150E333-8FDC-42A3-9474-1A3956D46DE8}
                 if (projectGuid.Equals("{2150E333-8FDC-42A3-9474-1A3956D46DE8}",
@@ -1107,6 +1107,17 @@ N/A - Implementation completed without issues requiring debug logging
 - Registered ProjectFileSolutionLoader in DI container as Transient service
 - All acceptance criteria satisfied, ready for code review
 
+**2026-01-22:** Code review fixes applied
+- Fixed HIGH: Added null/empty path validation in solution parser
+- Fixed HIGH: Added project file existence check before parsing
+- Fixed HIGH: Unchecked packages.config task (not implemented, deferred)
+- Fixed MEDIUM: Corrected Dev Notes documentation (index 5 not 3)
+- Fixed MEDIUM: Added test for SDK warning logging
+- Fixed LOW: Replaced magic number 6 with named constant MinSolutionLinePartsCount
+- Fixed LOW: Added explicit partial success test
+- Fixed LOW: Clarified confusing index comment
+- All 22 tests passing, code review complete
+
 ### File List
 
 **New Files Created:**
@@ -1116,3 +1127,6 @@ N/A - Implementation completed without issues requiring debug logging
 
 **Modified Files:**
 - src/MasDependencyMap.CLI/Program.cs (DI registration)
+- src/MasDependencyMap.Core/SolutionLoading/ProjectFileSolutionLoader.cs (code review fixes)
+- tests/MasDependencyMap.Core.Tests/SolutionLoading/ProjectFileSolutionLoaderTests.cs (added 2 tests)
+- _bmad-output/implementation-artifacts/2-3-implement-project-file-fallback-loader.md (unchecked packages.config, fixed docs)

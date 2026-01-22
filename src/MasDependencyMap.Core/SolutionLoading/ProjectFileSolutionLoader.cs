@@ -14,6 +14,7 @@ public class ProjectFileSolutionLoader : ISolutionLoader
 {
     private readonly ILogger<ProjectFileSolutionLoader> _logger;
     private const string SolutionFolderGuid = "{2150E333-8FDC-42A3-9474-1A3956D46DE8}";
+    private const int MinSolutionLinePartsCount = 6; // Minimum parts after splitting by quotes
 
     /// <summary>
     /// Creates a new ProjectFileSolutionLoader with logging support.
@@ -142,10 +143,10 @@ public class ProjectFileSolutionLoader : ISolutionLoader
             {
                 // Parse: Project("{GUID}") = "Name", "Path\To\Project.csproj", "{GUID}"
                 var parts = line.Split(new[] { '\"' }, StringSplitOptions.RemoveEmptyEntries);
-                if (parts.Length >= 6)
+                if (parts.Length >= MinSolutionLinePartsCount)
                 {
-                    var projectGuid = parts[1]; // Project type GUID is in 2nd quoted section
-                    var projectPath = parts[5]; // Path is in 6th quoted section (0-indexed: 0,1,2,3,4,5)
+                    var projectGuid = parts[1]; // Project type GUID is at index 1
+                    var projectPath = parts[5]; // Project path is at index 5
 
                     // Skip solution folders: {2150E333-8FDC-42A3-9474-1A3956D46DE8}
                     if (projectGuid.Equals(SolutionFolderGuid, StringComparison.OrdinalIgnoreCase))
@@ -153,8 +154,22 @@ public class ProjectFileSolutionLoader : ISolutionLoader
                         continue;
                     }
 
+                    // Validate project path is not null/empty
+                    if (string.IsNullOrWhiteSpace(projectPath))
+                    {
+                        _logger.LogWarning("Skipping project with empty path in solution file");
+                        continue;
+                    }
+
                     // Resolve relative path to absolute
                     var fullPath = Path.GetFullPath(Path.Combine(solutionDirectory, projectPath));
+
+                    // Verify project file exists before adding
+                    if (!File.Exists(fullPath))
+                    {
+                        _logger.LogWarning("Project file not found, skipping: {ProjectPath}", fullPath);
+                        continue;
+                    }
 
                     // Only include .csproj, .vbproj, .fsproj
                     var ext = Path.GetExtension(fullPath).ToLowerInvariant();
