@@ -48,7 +48,7 @@ development_status:
   1-5-set-up-dependency-injection-container: done
   1-6-implement-structured-logging-with-microsoft-extensions-logging: done
   1-7-create-sample-solution-for-testing: done
-  1-8-create-readme-and-user-documentation: backlog
+  1-8-create-readme-and-user-documentation: done
   epic-1-retrospective: optional
 
   epic-2: backlog
