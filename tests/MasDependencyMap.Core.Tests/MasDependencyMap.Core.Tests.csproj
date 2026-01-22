@@ -24,4 +24,11 @@
     <ProjectReference Include="..\..\src\MasDependencyMap.Core\MasDependencyMap.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Copy sample solution to test output for integration testing -->
+    <None Include="..\..\samples\**\*.*" Link="samples\%(RecursiveDir)%(Filename)%(Extension)">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>

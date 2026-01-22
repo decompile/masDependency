@@ -116,6 +116,7 @@ public class Program
 
         // Register Core service interfaces (Singleton lifetime for stateless services)
         // Use TryAdd pattern to allow test overrides per project-context.md line 217
+        services.TryAddTransient<MSBuildSolutionLoader>(); // Transient: new instance per analysis
         services.TryAddSingleton<ISolutionLoader, RoslynSolutionLoader>();
         services.TryAddSingleton<IGraphvizRenderer, GraphvizRenderer>();
         services.TryAddSingleton<IDependencyGraphBuilder, DependencyGraphBuilder>();

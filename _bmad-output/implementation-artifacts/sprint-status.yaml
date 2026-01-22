@@ -51,9 +51,9 @@ development_status:
   1-8-create-readme-and-user-documentation: done
   epic-1-retrospective: optional
 
-  epic-2: backlog
-  2-1-implement-solution-loader-interface-and-roslyn-loader: backlog
-  2-2-implement-msbuild-fallback-loader: backlog
+  epic-2: in-progress
+  2-1-implement-solution-loader-interface-and-roslyn-loader: done
+  2-2-implement-msbuild-fallback-loader: done
   2-3-implement-project-file-fallback-loader: backlog
   2-4-implement-strategy-pattern-fallback-chain: backlog
   2-5-build-dependency-graph-with-quikgraph: backlog
