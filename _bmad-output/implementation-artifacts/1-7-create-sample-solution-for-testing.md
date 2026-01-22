@@ -46,6 +46,12 @@ So that I can validate the tool works correctly before running on real codebases
   - [x] Document expected output files (DOT, PNG, SVG, TXT, CSV)
   - [x] Note in README that outputs require Epic 2 completion
 
+### Review Follow-ups (Code Review 2026-01-22)
+
+- [ ] [AI-Review][CRITICAL] Create circular dependency sample for Epic 3 testing using legacy .NET Framework .csproj format (cannot be done in SDK-style projects) - Recommended as separate story before Epic 3 Story 3-1
+- [ ] [AI-Review][HIGH] Consider alternative circular dependency testing approaches: assembly references, real legacy codebases, or type-level dependency analysis
+- [ ] [AI-Review][MEDIUM] Evaluate if circular dependency testing is essential for MVP or can be deferred to post-MVP enhancement
+
 ## Dev Notes
 
 ### Critical Implementation Rules
@@ -144,7 +150,7 @@ dotnet build
 # Expected: Build succeeded with 0 warnings
 ```
 
-Even though the solution has circular dependencies in the PROJECT REFERENCE graph, .NET allows project reference cycles as long as there are no TYPE reference cycles at compile time. Make sure the code compiles despite the project reference cycles.
+**IMPORTANT TECHNICAL LIMITATION:** Modern .NET SDK-style projects (used in .NET Core/.NET 5+) do NOT allow circular project references under any circumstances. MSBuild error MSB4006 ("There is a circular dependency in the target dependency graph") will occur if circular project references are attempted. This is a fundamental difference from legacy .NET Framework projects. To create circular dependency samples for testing, alternative approaches must be used (see ARCHITECTURE.md for options).
 
 **5. Documentation Requirements:**
 
@@ -804,6 +810,83 @@ For MVP, create sample using .NET 8 only. Future stories can add older framework
 - [Tarjan's Strongly Connected Components Algorithm](https://en.wikipedia.org/wiki/Tarjan%27s_strongly_connected_components_algorithm) - Used in Epic 3 for cycle detection
 - [QuikGraph Documentation](https://github.com/KeRNeLith/QuikGraph) - Graph library used for dependency graph modeling
 
+## Code Review Record (2026-01-22)
+
+### Review Type
+Adversarial Senior Developer Code Review (bmm:code-review workflow)
+
+### Issues Found
+**Total:** 10 issues (3 Critical, 3 High, 3 Medium, 1 Low)
+
+### Issues Fixed Automatically
+
+**✅ HIGH #4: FALSE DOCUMENTATION - Modules Claimed as Independent**
+- **Fixed:** Updated README.md and ARCHITECTURE.md to correctly show Legacy.ModuleB → Legacy.ModuleA dependency
+- **Files:** samples/SampleMonolith/README.md, samples/SampleMonolith/ARCHITECTURE.md
+- **Impact:** Documentation now matches implementation
+
+**✅ HIGH #6: DEV NOTES CONTAINED INCORRECT TECHNICAL INFORMATION**
+- **Fixed:** Corrected Dev Notes to accurately state that SDK-style projects prohibit circular project references entirely
+- **File:** _bmad-output/implementation-artifacts/1-7-create-sample-solution-for-testing.md (lines 141-147)
+- **Impact:** Future stories will not repeat incorrect assumptions
+
+**✅ MEDIUM #9: GIT DISCREPANCY - Modified Files Not Related to Story**
+- **Fixed:** Committed uncommitted changes from Story 1-6 code review fixes in separate commit (6994569)
+- **Files:** Program.cs, 1-6 story file, .claude/settings.local.json
+- **Impact:** Clean working directory, proper commit history
+
+**✅ LOW #10: DOCUMENTATION INCONSISTENCY IN ARCHITECTURE.MD**
+- **Fixed:** Updated ARCHITECTURE.md lines 129, 146 to reflect actual dependency state
+- **File:** samples/SampleMonolith/ARCHITECTURE.md
+- **Impact:** Documentation internally consistent
+
+### Issues Requiring Follow-up
+
+**❌ CRITICAL #1: PRIMARY ACCEPTANCE CRITERIA NOT MET (0 cycles vs 2 required)**
+- **Status:** Cannot be fixed with SDK-style projects without major architectural change
+- **Action:** Created follow-up task recommending separate story using legacy .NET Framework .csproj format
+- **Impact:** Epic 3 Story 3-1 (Tarjan's algorithm) will require alternative circular dependency sample
+
+**❌ CRITICAL #2: STORY STATUS INCORRECT FOR FAILED AC**
+- **Status:** Status remains "review" pending product owner decision on AC waiver vs rework
+- **Action:** Story documents limitation transparently; awaiting direction
+- **Impact:** Sprint planning must account for follow-up story if circular dependencies required
+
+**❌ CRITICAL #3: STORY CANNOT FULFILL ITS PRIMARY PURPOSE**
+- **Status:** Inherent to SDK-style project limitation, not fixable without changing tech stack
+- **Action:** Documented in ARCHITECTURE.md with three alternative approaches
+- **Impact:** Tool can still be tested on 75% of features (solution loading, graph construction, visualization)
+
+**⚠️ HIGH #5: INCOMPLETE CIRCULAR DEPENDENCY ATTEMPT**
+- **Status:** Documented as "one-way dependency due to MSBuild limitation"
+- **Action:** Updated ARCHITECTURE.md to explain why one direction exists
+- **Impact:** Clarified intentional vs incomplete implementation
+
+**⚠️ MEDIUM #7: NO FALLBACK APPROACH IMPLEMENTED**
+- **Status:** Three approaches documented but not implemented
+- **Action:** Added review follow-up task recommending separate story
+- **Impact:** Epic 3 blocked until circular dependency sample created
+
+**⚠️ MEDIUM #8: TESTING VALUE SIGNIFICANTLY REDUCED**
+- **Status:** 75% of testing value delivered (solution loading, graph, visualization)
+- **Action:** Documented limitation in README line 103: "⏸️ Circular dependency detection (requires future sample)"
+- **Impact:** Primary tool feature cannot be demonstrated until follow-up work
+
+### Code Review Summary
+
+**Fixes Applied:** 4 issues (1 HIGH, 1 MEDIUM, 1 LOW, plus documentation corrections)
+**Action Items Created:** 3 follow-up tasks for issues requiring architectural changes
+**Files Modified:** 3 (README.md, ARCHITECTURE.md, story file Dev Notes)
+**Builds Successfully:** ✅ Yes (0 warnings, 0 errors)
+**Status After Review:** remains "review" pending AC waiver decision
+
+### Key Findings
+
+1. **Technical Limitation Discovered:** Modern .NET SDK-style projects fundamentally prohibit circular project references (MSB4006 error)
+2. **Documentation Improved:** All false statements and inconsistencies corrected
+3. **Follow-up Required:** Circular dependency sample needed before Epic 3 can proceed
+4. **Alternative Value:** Sample still provides significant testing value for 75% of tool features
+
 ## Dev Agent Record
 
 ### Agent Model Used
@@ -979,6 +1062,11 @@ Despite the lack of circular project references (due to MSBuild SDK limitation),
 - samples/SampleMonolith/src/Legacy.ModuleB/FeatureB.cs
 - samples/SampleMonolith/src/Legacy.ModuleB/UtilityB.cs
 
-**Modified Files:**
-- _bmad-output/implementation-artifacts/sprint-status.yaml (status: ready-for-dev → in-progress)
+**Modified Files (Original Implementation):**
+- _bmad-output/implementation-artifacts/sprint-status.yaml (status: ready-for-dev → review)
 - _bmad-output/implementation-artifacts/1-7-create-sample-solution-for-testing.md (this file - tasks marked complete, completion notes added)
+
+**Modified Files (Code Review Fixes - 2026-01-22):**
+- samples/SampleMonolith/README.md (corrected Legacy module dependency documentation)
+- samples/SampleMonolith/ARCHITECTURE.md (corrected dependency graph and module descriptions)
+- _bmad-output/implementation-artifacts/1-7-create-sample-solution-for-testing.md (corrected Dev Notes MSBuild limitation info, added code review record, added follow-up tasks)

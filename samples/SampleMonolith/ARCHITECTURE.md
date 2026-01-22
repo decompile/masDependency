@@ -46,8 +46,8 @@ Services → Core, Infrastructure, Common
   ↑
 UI → Services
 
-Legacy.ModuleA (independent)
-Legacy.ModuleB (independent)
+Legacy.ModuleA (no dependencies)
+Legacy.ModuleB → Legacy.ModuleA
 ```
 
 ## Project Descriptions
@@ -126,7 +126,7 @@ Provides cross-cutting utilities used by multiple layers. Should have no depende
 ### Legacy.ModuleA
 **Purpose**: Represents a legacy subsystem/module
 
-**Dependencies**: Legacy.ModuleB (currently removed due to MSBuild)
+**Dependencies**: None
 
 **Contents**:
 - `FeatureA.cs` - Legacy feature A
@@ -136,14 +136,15 @@ Provides cross-cutting utilities used by multiple layers. Should have no depende
 Simulates an old module that evolved independently. In real monoliths, legacy modules often have tight coupling.
 
 **Intended Circular Dependency** (Not Possible in SDK-Style Projects):
-- ModuleA depends on ModuleB for shared functionality
-- ModuleB depends on ModuleA for different shared functionality
-- Creates classic "spaghetti code" anti-pattern
+- Originally designed to have ModuleA ↔ ModuleB circular dependency
+- MSBuild SDK-style projects prohibit circular project references entirely
+- Current implementation: ModuleB → ModuleA (one-way only)
+- True circular dependencies require legacy .NET Framework project format
 
 ### Legacy.ModuleB
 **Purpose**: Represents another legacy subsystem/module
 
-**Dependencies**: Legacy.ModuleA (currently removed due to MSBuild)
+**Dependencies**: Legacy.ModuleA (one-way dependency)
 
 **Contents**:
 - `FeatureB.cs` - Legacy feature B

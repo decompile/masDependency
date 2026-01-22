@@ -25,8 +25,8 @@ Services → Core, Infrastructure, Common
   ↑
 UI → Services
 
-Legacy.ModuleA (independent)
-Legacy.ModuleB (independent)
+Legacy.ModuleA (no dependencies)
+Legacy.ModuleB → Legacy.ModuleA
 ```
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed architecture documentation and discussion of circular dependency limitations in modern .NET.
