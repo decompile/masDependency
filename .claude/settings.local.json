@@ -16,7 +16,9 @@
       "Bash(git add:*)",
       "Bash(git commit -m \"$\\(cat <<''EOF''\nAdd NuGet dependencies to Core/CLI/Tests projects\n\n- Core: Microsoft.CodeAnalysis.CSharp.Workspaces v5.0.0, Microsoft.Build.Locator v1.11.2, QuikGraph v2.5.0, CsvHelper v33.1.0\n- CLI: System.CommandLine v2.0.2, Spectre.Console v0.54.0, Microsoft.Extensions.DependencyInjection v10.0.2, Microsoft.Extensions.Configuration.Json v10.0.2, Microsoft.Extensions.Logging.Console v10.0.2\n- Tests: FluentAssertions v8.8.0, Moq v4.20.72\n- All packages restore and build successfully \\(0 warnings, 0 errors\\)\n- Critical version requirements met: QuikGraph v2.5.0, System.CommandLine v2.0.2, Spectre.Console v0.54.0\n\nCo-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
       "Bash(dotnet list:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(dotnet run:*)",
+      "WebFetch(domain:www.nuget.org)"
     ]
   }
 }

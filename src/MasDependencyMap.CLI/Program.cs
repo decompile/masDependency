@@ -198,22 +198,27 @@ public class Program
             var format = parseResult.GetValue(formatOption);
             var verbose = parseResult.GetValue(verboseOption);
 
-            // Example structured logging (visible with --verbose flag only)
-            logger.LogInformation("Analyze command invoked with solution: {SolutionPath}", solution?.FullName ?? "N/A");
-            logger.LogDebug("Configuration - Reports: {Reports}, Format: {Format}", reports ?? "N/A", format ?? "N/A");
-
-            // Validate required option
+            // Validate required option BEFORE logging (to avoid confusing diagnostics)
             if (solution == null)
             {
                 ansiConsole.MarkupLine("[red]Error:[/] --solution is required");
+                ansiConsole.MarkupLine("[dim]Reason:[/] The analyze command requires a solution file path");
+                ansiConsole.MarkupLine("[dim]Suggestion:[/] Use --solution path/to/your.sln");
                 return 1;
             }
 
             if (!solution.Exists)
             {
-                ansiConsole.MarkupLine($"[red]Error:[/] Solution file not found: {solution.FullName}");
+                ansiConsole.MarkupLine($"[red]Error:[/] Solution file not found");
+                ansiConsole.MarkupLine($"[dim]Reason:[/] No file exists at {solution.FullName}");
+                ansiConsole.MarkupLine("[dim]Suggestion:[/] Verify the path and try again");
                 return 1;
             }
+
+            // Example structured logging (for demonstration - typically commented in production)
+            // Uncomment these lines to see structured logging in action with --verbose flag
+            // logger.LogInformation("Analyze command invoked with solution: {SolutionPath}", solution.FullName);
+            // logger.LogDebug("Configuration - Reports: {Reports}, Format: {Format}", reports ?? "N/A", format ?? "N/A");
 
             // Display parsed options using IAnsiConsole
             ansiConsole.MarkupLine("[bold green]Parsed Options:[/]");
