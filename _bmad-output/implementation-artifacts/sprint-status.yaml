@@ -47,7 +47,7 @@ development_status:
   1-4-implement-configuration-management-with-json-support: done
   1-5-set-up-dependency-injection-container: done
   1-6-implement-structured-logging-with-microsoft-extensions-logging: done
-  1-7-create-sample-solution-for-testing: review
+  1-7-create-sample-solution-for-testing: done
   1-8-create-readme-and-user-documentation: backlog
   epic-1-retrospective: optional
 
