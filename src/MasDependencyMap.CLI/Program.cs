@@ -116,10 +116,12 @@ public class Program
 
         // Register Core service interfaces (Singleton lifetime for stateless services)
         // Use TryAdd pattern to allow test overrides per project-context.md line 217
-        // Fallback chain registered in reverse order: ProjectFile → MSBuild → Roslyn (primary)
-        services.TryAddTransient<ProjectFileSolutionLoader>(); // Transient: new instance per analysis
+        // Fallback chain: All three loaders registered as Transient (new instance per analysis)
+        services.TryAddTransient<RoslynSolutionLoader>(); // Transient: new instance per analysis
         services.TryAddTransient<MSBuildSolutionLoader>(); // Transient: new instance per analysis
-        services.TryAddSingleton<ISolutionLoader, RoslynSolutionLoader>();
+        services.TryAddTransient<ProjectFileSolutionLoader>(); // Transient: new instance per analysis
+        services.TryAddTransient<FallbackSolutionLoader>(); // Orchestrator: new instance per analysis
+        services.TryAddTransient<ISolutionLoader, FallbackSolutionLoader>(); // Primary interface implementation
         services.TryAddSingleton<IGraphvizRenderer, GraphvizRenderer>();
         services.TryAddSingleton<IDependencyGraphBuilder, DependencyGraphBuilder>();
 
