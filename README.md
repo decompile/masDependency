@@ -24,7 +24,7 @@ A .NET dependency analyzer that visualizes project dependencies, detects circula
   - Verify installation: `dotnet --version` should show 8.0.x
 - **Graphviz 2.38+**: Required for visualization
   - Download from [graphviz.org/download](https://graphviz.org/download/)
-  - Verify installation: `dot -version`
+  - Verify installation: `dot -V` (note: uppercase V)
 
 ## Installation
 
@@ -49,19 +49,27 @@ dotnet run --project src/MasDependencyMap.CLI -- --version
 1. Download installer from [graphviz.org/download](https://graphviz.org/download/)
 2. Install to `C:\Program Files\Graphviz` (or preferred location)
 3. Add `C:\Program Files\Graphviz\bin` to your PATH environment variable
-4. Restart terminal and verify: `dot -version`
+4. Restart terminal and verify: `dot -V`
+
+Alternatively, use Chocolatey:
+```powershell
+choco install graphviz
+dot -V
+```
 
 **macOS:**
 ```bash
 brew install graphviz
-dot -version
+dot -V
 ```
 
 **Linux (Ubuntu/Debian):**
 ```bash
 sudo apt-get install graphviz
-dot -version
+dot -V
 ```
+
+**Note:** Story 2.7 implements Graphviz detection with helpful installation guidance. The tool will check if Graphviz is installed before attempting visualization.
 
 ## Quick Start
 

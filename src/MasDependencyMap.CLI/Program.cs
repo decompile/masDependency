@@ -1,6 +1,7 @@
 using MasDependencyMap.Core.Configuration;
 using MasDependencyMap.Core.DependencyAnalysis;
 using MasDependencyMap.Core.Filtering;
+using MasDependencyMap.Core.Rendering;
 using MasDependencyMap.Core.SolutionLoading;
 using MasDependencyMap.Core.Visualization;
 using Microsoft.Build.Locator;

@@ -18,7 +18,9 @@
       "Bash(dotnet list:*)",
       "Bash(git commit:*)",
       "Bash(dotnet run:*)",
-      "WebFetch(domain:www.nuget.org)"
+      "WebFetch(domain:www.nuget.org)",
+      "Bash(git push:*)",
+      "Bash(git log:*)"
     ]
   }
 }
