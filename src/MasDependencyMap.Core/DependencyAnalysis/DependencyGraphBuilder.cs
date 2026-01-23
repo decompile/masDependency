@@ -27,7 +27,7 @@ public class DependencyGraphBuilder : IDependencyGraphBuilder
     /// <param name="solution">The solution analysis containing projects and dependencies.</param>
     /// <param name="cancellationToken">Cancellation token for async operations.</param>
     /// <returns>A dependency graph with all projects and dependencies.</returns>
-    public async Task<DependencyGraph> BuildAsync(
+    public Task<DependencyGraph> BuildAsync(
         SolutionAnalysis solution,
         CancellationToken cancellationToken = default)
     {
@@ -95,16 +95,16 @@ public class DependencyGraphBuilder : IDependencyGraphBuilder
             graph.EdgeCount);
 
         // Validation: Detect orphaned nodes
-        var orphaned = graph.DetectOrphanedNodes().ToList();
+        var orphaned = graph.DetectOrphanedNodes();
         if (orphaned.Any())
         {
-            _logger.LogWarning(
+            _logger.LogInformation(
                 "Found {OrphanedCount} orphaned nodes (no dependencies): {OrphanedNodes}",
                 orphaned.Count,
                 string.Join(", ", orphaned.Select(n => n.ProjectName)));
         }
 
-        return await Task.FromResult(graph).ConfigureAwait(false);
+        return Task.FromResult(graph);
     }
 
     /// <summary>
@@ -114,7 +114,7 @@ public class DependencyGraphBuilder : IDependencyGraphBuilder
     /// <param name="solutions">The collection of solution analyses to merge.</param>
     /// <param name="cancellationToken">Cancellation token for async operations.</param>
     /// <returns>A unified dependency graph containing all projects across all solutions.</returns>
-    public async Task<DependencyGraph> BuildAsync(
+    public Task<DependencyGraph> BuildAsync(
         IEnumerable<SolutionAnalysis> solutions,
         CancellationToken cancellationToken = default)
     {
@@ -208,15 +208,15 @@ public class DependencyGraphBuilder : IDependencyGraphBuilder
             crossSolutionCount);
 
         // Validation: Detect orphaned nodes
-        var orphaned = graph.DetectOrphanedNodes().ToList();
+        var orphaned = graph.DetectOrphanedNodes();
         if (orphaned.Any())
         {
-            _logger.LogWarning(
+            _logger.LogInformation(
                 "Found {OrphanedCount} orphaned nodes (no dependencies): {OrphanedNodes}",
                 orphaned.Count,
                 string.Join(", ", orphaned.Select(n => n.ProjectName)));
         }
 
-        return await Task.FromResult(graph).ConfigureAwait(false);
+        return Task.FromResult(graph);
     }
 }

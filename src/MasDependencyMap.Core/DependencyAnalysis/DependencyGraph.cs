@@ -132,10 +132,10 @@ public class DependencyGraph
     /// Detects orphaned nodes (projects with no dependencies and no dependents).
     /// These are projects that are completely isolated in the graph.
     /// </summary>
-    /// <returns>An enumerable of orphaned project nodes.</returns>
-    public IEnumerable<ProjectNode> DetectOrphanedNodes()
+    /// <returns>A list of orphaned project nodes.</returns>
+    public IReadOnlyList<ProjectNode> DetectOrphanedNodes()
     {
-        return Vertices.Where(v => _graph.IsOutEdgesEmpty(v) && _graph.IsInEdgesEmpty(v));
+        return Vertices.Where(v => _graph.IsOutEdgesEmpty(v) && _graph.IsInEdgesEmpty(v)).ToList();
     }
 
     /// <summary>

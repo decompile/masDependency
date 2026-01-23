@@ -32,7 +32,10 @@ public class DependencyEdge : IEdge<ProjectNode>
     /// Gets a value indicating whether this dependency crosses solution boundaries.
     /// True when the source and target projects belong to different solutions.
     /// </summary>
-    public bool IsCrossSolution => !Source.SolutionName.Equals(Target.SolutionName, StringComparison.OrdinalIgnoreCase);
+    public bool IsCrossSolution =>
+        !string.IsNullOrEmpty(Source.SolutionName) &&
+        !string.IsNullOrEmpty(Target.SolutionName) &&
+        !Source.SolutionName.Equals(Target.SolutionName, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// Returns a string representation of this edge for debugging.
