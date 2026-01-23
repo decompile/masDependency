@@ -63,6 +63,7 @@ public class FrameworkFilter : IFrameworkFilter
         // Add all vertices (filtering removes edges, not vertices)
         foreach (var vertex in graph.Vertices)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             filteredGraph.AddVertex(vertex);
         }
 
@@ -72,6 +73,8 @@ public class FrameworkFilter : IFrameworkFilter
 
         foreach (var edge in graph.Edges)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+
             // Check if target project is blocked
             if (IsBlocked(edge.Target.ProjectName, _configuration.BlockList, _configuration.AllowList))
             {
@@ -84,20 +87,19 @@ public class FrameworkFilter : IFrameworkFilter
             retainedCount++;
         }
 
-        // Log statistics
-        var blockedPercent = originalEdgeCount > 0
-            ? (blockedCount / (double)originalEdgeCount) * 100
-            : 0;
-        var retainedPercent = originalEdgeCount > 0
-            ? (retainedCount / (double)originalEdgeCount) * 100
-            : 0;
+        // Log statistics (skip logging for empty graphs to reduce noise)
+        if (originalEdgeCount > 0)
+        {
+            var blockedPercent = (blockedCount / (double)originalEdgeCount) * 100;
+            var retainedPercent = (retainedCount / (double)originalEdgeCount) * 100;
 
-        _logger.LogInformation(
-            "Filtered {BlockedCount} framework refs ({BlockedPercent:F1}%), retained {RetainedCount} custom refs ({RetainedPercent:F1}%)",
-            blockedCount,
-            blockedPercent,
-            retainedCount,
-            retainedPercent);
+            _logger.LogInformation(
+                "Filtered {BlockedCount} framework refs ({BlockedPercent:F1}%), retained {RetainedCount} custom refs ({RetainedPercent:F1}%)",
+                blockedCount,
+                blockedPercent,
+                retainedCount,
+                retainedPercent);
+        }
 
         return Task.FromResult(filteredGraph);
     }
@@ -120,13 +122,15 @@ public class FrameworkFilter : IFrameworkFilter
     private bool IsBlocked(string projectName, List<string> blockList, List<string> allowList)
     {
         // Step 1: Check AllowList first (takes precedence)
-        if (allowList != null && allowList.Any(pattern => MatchesPattern(projectName, pattern)))
+        // Filter out null patterns to prevent NullReferenceException
+        if (allowList != null && allowList.Where(p => p != null).Any(pattern => MatchesPattern(projectName, pattern)))
         {
             return false; // Explicitly allowed
         }
 
         // Step 2: Check BlockList
-        if (blockList != null && blockList.Any(pattern => MatchesPattern(projectName, pattern)))
+        // Filter out null patterns to prevent NullReferenceException
+        if (blockList != null && blockList.Where(p => p != null).Any(pattern => MatchesPattern(projectName, pattern)))
         {
             return true; // Blocked
         }

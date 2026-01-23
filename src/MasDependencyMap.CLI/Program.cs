@@ -131,6 +131,7 @@ public class Program
         services
             .AddOptions<FilterConfiguration>()
             .Bind(configuration.GetSection("FrameworkFilters"))
+            .ValidateDataAnnotations()
             .ValidateOnStart();
 
         // Register ScoringConfiguration with validation
