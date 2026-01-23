@@ -79,65 +79,96 @@ public class GraphvizRendererTests
     }
 
     [Fact]
-    public async Task RenderToFileAsync_NotImplemented_ThrowsNotImplementedException()
+    public async Task RenderToFileAsync_NullDotFilePath_ThrowsArgumentNullException()
     {
-        // Arrange - no setup needed
-
         // Act
         Func<Task> act = async () => await _renderer.RenderToFileAsync(
-            "test.dot",
+            null!,
             GraphvizOutputFormat.Png);
 
         // Assert
-        await act.Should().ThrowAsync<NotImplementedException>()
-            .WithMessage("*Story 2.9*");
+        await act.Should().ThrowAsync<ArgumentNullException>()
+            .WithParameterName("dotFilePath");
     }
 
     [Fact]
-    public async Task RenderToFileAsync_WithSvgFormat_ThrowsNotImplementedException()
+    public async Task RenderToFileAsync_EmptyDotFilePath_ThrowsArgumentException()
     {
-        // Arrange - no setup needed
-
         // Act
         Func<Task> act = async () => await _renderer.RenderToFileAsync(
-            "test.dot",
-            GraphvizOutputFormat.Svg);
+            "",
+            GraphvizOutputFormat.Png);
 
         // Assert
-        await act.Should().ThrowAsync<NotImplementedException>()
-            .WithMessage("*Story 2.9*");
+        await act.Should().ThrowAsync<ArgumentException>()
+            .WithParameterName("dotFilePath");
     }
 
     [Fact]
-    public async Task RenderToFileAsync_WithPdfFormat_ThrowsNotImplementedException()
+    public async Task RenderToFileAsync_WhitespaceDotFilePath_ThrowsArgumentException()
     {
-        // Arrange - no setup needed
-
         // Act
         Func<Task> act = async () => await _renderer.RenderToFileAsync(
-            "test.dot",
-            GraphvizOutputFormat.Pdf);
+            "   ",
+            GraphvizOutputFormat.Png);
 
         // Assert
-        await act.Should().ThrowAsync<NotImplementedException>()
-            .WithMessage("*Story 2.9*");
+        await act.Should().ThrowAsync<ArgumentException>()
+            .WithParameterName("dotFilePath");
     }
 
     [Fact]
-    public async Task RenderToFileAsync_WithCancellationToken_ThrowsNotImplementedException()
+    public async Task RenderToFileAsync_NonExistentDotFile_ThrowsArgumentException()
     {
         // Arrange
-        using var cts = new CancellationTokenSource();
+        var nonExistentPath = Path.Combine(Path.GetTempPath(), "nonexistent-" + Guid.NewGuid() + ".dot");
 
         // Act
         Func<Task> act = async () => await _renderer.RenderToFileAsync(
-            "test.dot",
-            GraphvizOutputFormat.Png,
-            cts.Token);
+            nonExistentPath,
+            GraphvizOutputFormat.Png);
 
         // Assert
-        await act.Should().ThrowAsync<NotImplementedException>()
-            .WithMessage("*Story 2.9*");
+        await act.Should().ThrowAsync<ArgumentException>()
+            .WithMessage("*not found*");
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
+    [Trait("Requires", "Graphviz")]
+    public async Task RenderToFileAsync_CancelledToken_ThrowsOperationCanceledException()
+    {
+        // This test requires Graphviz to be installed
+        var isInstalled = await _renderer.IsGraphvizInstalledAsync();
+        if (!isInstalled)
+        {
+            // Skip test if Graphviz not installed
+            true.Should().BeTrue("SKIPPED: Graphviz not installed - cannot test cancellation");
+            return;
+        }
+
+        // Arrange
+        var dotFile = Path.Combine(Path.GetTempPath(), "test-" + Guid.NewGuid() + ".dot");
+        await File.WriteAllTextAsync(dotFile, "digraph test { A -> B; }");
+        var cts = new CancellationTokenSource();
+        cts.Cancel(); // Cancel immediately
+
+        try
+        {
+            // Act
+            Func<Task> act = async () => await _renderer.RenderToFileAsync(
+                dotFile,
+                GraphvizOutputFormat.Png,
+                cts.Token);
+
+            // Assert
+            await act.Should().ThrowAsync<OperationCanceledException>();
+        }
+        finally
+        {
+            if (File.Exists(dotFile))
+                File.Delete(dotFile);
+        }
     }
 
     [Fact]
@@ -231,6 +262,216 @@ public class GraphvizRendererIntegrationTests
             isInstalled.Should().BeTrue("Graphviz detected in PATH");
         }
     }
+
+    [Fact]
+    [Trait("Category", "Integration")]
+    [Trait("Requires", "Graphviz")]
+    public async Task RenderToFileAsync_ValidDotFilePng_CreatesFile()
+    {
+        // Arrange
+        var renderer = new GraphvizRenderer(NullLogger<GraphvizRenderer>.Instance);
+        var isInstalled = await renderer.IsGraphvizInstalledAsync();
+        if (!isInstalled)
+        {
+            // Skip test if Graphviz not installed
+            true.Should().BeTrue("SKIPPED: Graphviz not installed");
+            return;
+        }
+
+        var dotContent = @"digraph test {
+            rankdir=LR;
+            A [label=""Node A""];
+            B [label=""Node B""];
+            A -> B;
+        }";
+
+        var dotFile = Path.Combine(Path.GetTempPath(), "test-" + Guid.NewGuid() + ".dot");
+        await File.WriteAllTextAsync(dotFile, dotContent);
+
+        try
+        {
+            // Act
+            var outputPath = await renderer.RenderToFileAsync(dotFile, GraphvizOutputFormat.Png);
+
+            // Assert
+            outputPath.Should().NotBeNullOrEmpty();
+            File.Exists(outputPath).Should().BeTrue();
+            outputPath.Should().EndWith(".png");
+
+            var fileInfo = new FileInfo(outputPath);
+            fileInfo.Length.Should().BeGreaterThan(0);
+            fileInfo.Length.Should().BeGreaterThan(1000); // PNG header + image data
+        }
+        finally
+        {
+            // Cleanup
+            if (File.Exists(dotFile))
+                File.Delete(dotFile);
+
+            var pngFile = Path.ChangeExtension(dotFile, ".png");
+            if (File.Exists(pngFile))
+                File.Delete(pngFile);
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
+    [Trait("Requires", "Graphviz")]
+    public async Task RenderToFileAsync_ValidDotFileSvg_CreatesFile()
+    {
+        // Arrange
+        var renderer = new GraphvizRenderer(NullLogger<GraphvizRenderer>.Instance);
+        var isInstalled = await renderer.IsGraphvizInstalledAsync();
+        if (!isInstalled)
+        {
+            // Skip test if Graphviz not installed
+            true.Should().BeTrue("SKIPPED: Graphviz not installed");
+            return;
+        }
+
+        var dotContent = @"digraph test {
+            rankdir=LR;
+            A [label=""Node A""];
+            B [label=""Node B""];
+            A -> B;
+        }";
+
+        var dotFile = Path.Combine(Path.GetTempPath(), "test-" + Guid.NewGuid() + ".dot");
+        await File.WriteAllTextAsync(dotFile, dotContent);
+
+        try
+        {
+            // Act
+            var outputPath = await renderer.RenderToFileAsync(dotFile, GraphvizOutputFormat.Svg);
+
+            // Assert
+            outputPath.Should().NotBeNullOrEmpty();
+            File.Exists(outputPath).Should().BeTrue();
+            outputPath.Should().EndWith(".svg");
+
+            // Verify SVG content
+            var svgContent = await File.ReadAllTextAsync(outputPath);
+            svgContent.Should().Contain("<?xml", "SVG should be valid XML");
+            svgContent.Should().Contain("<svg", "SVG should contain svg element");
+            svgContent.Should().Contain("Node A", "SVG should contain node labels");
+            svgContent.Should().Contain("Node B", "SVG should contain node labels");
+
+            var fileInfo = new FileInfo(outputPath);
+            fileInfo.Length.Should().BeGreaterThan(0);
+        }
+        finally
+        {
+            // Cleanup
+            if (File.Exists(dotFile))
+                File.Delete(dotFile);
+
+            var svgFile = Path.ChangeExtension(dotFile, ".svg");
+            if (File.Exists(svgFile))
+                File.Delete(svgFile);
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
+    [Trait("Requires", "Graphviz")]
+    public async Task RenderToFileAsync_ValidDotFilePdf_CreatesFile()
+    {
+        // Arrange
+        var renderer = new GraphvizRenderer(NullLogger<GraphvizRenderer>.Instance);
+        var isInstalled = await renderer.IsGraphvizInstalledAsync();
+        if (!isInstalled)
+        {
+            // Skip test if Graphviz not installed
+            true.Should().BeTrue("SKIPPED: Graphviz not installed");
+            return;
+        }
+
+        var dotContent = @"digraph test {
+            rankdir=LR;
+            A [label=""Node A""];
+            B [label=""Node B""];
+            A -> B;
+        }";
+
+        var dotFile = Path.Combine(Path.GetTempPath(), "test-" + Guid.NewGuid() + ".dot");
+        await File.WriteAllTextAsync(dotFile, dotContent);
+
+        try
+        {
+            // Act
+            var outputPath = await renderer.RenderToFileAsync(dotFile, GraphvizOutputFormat.Pdf);
+
+            // Assert
+            outputPath.Should().NotBeNullOrEmpty();
+            File.Exists(outputPath).Should().BeTrue();
+            outputPath.Should().EndWith(".pdf");
+
+            var fileInfo = new FileInfo(outputPath);
+            fileInfo.Length.Should().BeGreaterThan(0);
+            fileInfo.Length.Should().BeGreaterThan(1000); // PDF header + content
+        }
+        finally
+        {
+            // Cleanup
+            if (File.Exists(dotFile))
+                File.Delete(dotFile);
+
+            var pdfFile = Path.ChangeExtension(dotFile, ".pdf");
+            if (File.Exists(pdfFile))
+                File.Delete(pdfFile);
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
+    [Trait("Requires", "Graphviz")]
+    public async Task RenderToFileAsync_OutputPathGeneration_ReplacesExtension()
+    {
+        // Arrange
+        var renderer = new GraphvizRenderer(NullLogger<GraphvizRenderer>.Instance);
+        var isInstalled = await renderer.IsGraphvizInstalledAsync();
+        if (!isInstalled)
+        {
+            // Skip test if Graphviz not installed
+            true.Should().BeTrue("SKIPPED: Graphviz not installed");
+            return;
+        }
+
+        var dotContent = "digraph test { A -> B; }";
+        var dotFile = Path.Combine(Path.GetTempPath(), "test-" + Guid.NewGuid() + ".dot");
+        await File.WriteAllTextAsync(dotFile, dotContent);
+
+        try
+        {
+            // Act PNG
+            var pngPath = await renderer.RenderToFileAsync(dotFile, GraphvizOutputFormat.Png);
+
+            // Assert PNG
+            pngPath.Should().Be(Path.ChangeExtension(dotFile, ".png"));
+            File.Exists(pngPath).Should().BeTrue();
+
+            // Act SVG
+            var svgPath = await renderer.RenderToFileAsync(dotFile, GraphvizOutputFormat.Svg);
+
+            // Assert SVG
+            svgPath.Should().Be(Path.ChangeExtension(dotFile, ".svg"));
+            File.Exists(svgPath).Should().BeTrue();
+        }
+        finally
+        {
+            // Cleanup
+            if (File.Exists(dotFile))
+                File.Delete(dotFile);
+
+            var pngFile = Path.ChangeExtension(dotFile, ".png");
+            if (File.Exists(pngFile))
+                File.Delete(pngFile);
+
+            var svgFile = Path.ChangeExtension(dotFile, ".svg");
+            if (File.Exists(svgFile))
+                File.Delete(svgFile);
+        }
+    }
 }
 
 /// <summary>
@@ -304,6 +545,76 @@ public class GraphvizNotFoundExceptionTests
 
         // Act
         var exception = new GraphvizNotFoundException(message, innerException);
+
+        // Assert
+        exception.Message.Should().Be(message);
+        exception.InnerException.Should().Be(innerException);
+    }
+}
+
+/// <summary>
+/// Tests for GraphvizRenderException exception class.
+/// Verifies exception construction and message handling.
+/// </summary>
+public class GraphvizRenderExceptionTests
+{
+    [Fact]
+    public void Constructor_WithMessage_SetsMessage()
+    {
+        // Arrange
+        var message = "Rendering failed with exit code 1";
+
+        // Act
+        var exception = new GraphvizRenderException(message);
+
+        // Assert
+        exception.Message.Should().Be(message);
+    }
+
+    [Fact]
+    public void Constructor_WithMessageAndInnerException_PreservesInnerException()
+    {
+        // Arrange
+        var innerException = new InvalidOperationException("Inner exception for testing");
+        var message = "Outer exception message";
+
+        // Act
+        var exception = new GraphvizRenderException(message, innerException);
+
+        // Assert
+        exception.Message.Should().Be(message);
+        exception.InnerException.Should().Be(innerException);
+    }
+}
+
+/// <summary>
+/// Tests for GraphvizTimeoutException exception class.
+/// Verifies exception construction and message handling.
+/// </summary>
+public class GraphvizTimeoutExceptionTests
+{
+    [Fact]
+    public void Constructor_WithMessage_SetsMessage()
+    {
+        // Arrange
+        var message = "Rendering exceeded 30 second timeout";
+
+        // Act
+        var exception = new GraphvizTimeoutException(message);
+
+        // Assert
+        exception.Message.Should().Be(message);
+    }
+
+    [Fact]
+    public void Constructor_WithMessageAndInnerException_PreservesInnerException()
+    {
+        // Arrange
+        var innerException = new OperationCanceledException("Inner exception for testing");
+        var message = "Outer exception message";
+
+        // Act
+        var exception = new GraphvizTimeoutException(message, innerException);
 
         // Assert
         exception.Message.Should().Be(message);

@@ -21,9 +21,12 @@ public interface IGraphvizRenderer
     /// <param name="format">Output format (Png, Svg, Pdf).</param>
     /// <param name="cancellationToken">Cancellation token for timeout control.</param>
     /// <returns>Absolute path to the generated output file.</returns>
+    /// <exception cref="ArgumentNullException">When dotFilePath is null.</exception>
+    /// <exception cref="ArgumentException">When dotFilePath is empty, whitespace, or file doesn't exist.</exception>
     /// <exception cref="GraphvizNotFoundException">When Graphviz is not installed or not in PATH.</exception>
-    /// <exception cref="FileNotFoundException">When DOT file does not exist.</exception>
-    /// <exception cref="InvalidOperationException">When rendering fails.</exception>
+    /// <exception cref="GraphvizRenderException">When rendering fails (non-zero exit code or invalid output).</exception>
+    /// <exception cref="GraphvizTimeoutException">When rendering exceeds 30-second timeout.</exception>
+    /// <exception cref="OperationCanceledException">When cancellation is requested via cancellationToken.</exception>
     Task<string> RenderToFileAsync(
         string dotFilePath,
         GraphvizOutputFormat format,

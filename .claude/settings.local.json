@@ -20,7 +20,8 @@
       "Bash(dotnet run:*)",
       "WebFetch(domain:www.nuget.org)",
       "Bash(git push:*)",
-      "Bash(git log:*)"
+      "Bash(git log:*)",
+      "Bash(findstr:*)"
     ]
   }
 }
