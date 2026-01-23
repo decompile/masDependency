@@ -11,7 +11,11 @@ using MasDependencyMap.Core.DependencyAnalysis;
 public class DotGenerator : IDotGenerator
 {
     private readonly ILogger<DotGenerator> _logger;
-    private static readonly string[] SolutionColors = { "red", "blue", "green", "purple", "orange", "brown" };
+    // Node fill colors for solutions (lighter shades for better readability)
+    private static readonly string[] SolutionNodeColors = { "lightblue", "lightgreen", "lightyellow", "lightpink", "lightcyan", "lavender", "lightsalmon", "lightgray" };
+
+    // Edge colors for cross-solution dependencies (bold colors for visibility)
+    private static readonly string[] CrossSolutionEdgeColors = { "red", "blue", "green", "purple", "orange", "brown" };
 
     public DotGenerator(ILogger<DotGenerator> logger)
     {
@@ -42,12 +46,24 @@ public class DotGenerator : IDotGenerator
             _logger.LogWarning("Empty graph - no nodes or edges to visualize");
         }
 
+        // Detect if multi-solution by checking for multiple unique solution names
+        var uniqueSolutions = graph.Vertices
+            .Select(v => v.SolutionName)
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Count();
+
+        bool isMultiSolution = uniqueSolutions > 1;
+
         // Build DOT content
         var dotContent = BuildDotContent(graph);
 
-        // Prepare output path
+        // Prepare output path with multi-solution naming support
         var sanitizedSolutionName = SanitizeFileName(solutionName);
-        var fileName = $"{sanitizedSolutionName}-dependencies.dot";
+        var fileName = isMultiSolution
+            ? "Ecosystem-dependencies.dot"
+            : $"{sanitizedSolutionName}-dependencies.dot";
+
         var absoluteOutputDir = Path.GetFullPath(outputDirectory);
         Directory.CreateDirectory(absoluteOutputDir);
         var filePath = Path.Combine(absoluteOutputDir, fileName);
@@ -71,8 +87,25 @@ public class DotGenerator : IDotGenerator
 
     private string BuildDotContent(DependencyGraph graph)
     {
-        // Estimate capacity: ~50 chars per node + ~40 chars per edge + 200 for header/footer
-        var estimatedCapacity = Math.Max((graph.VertexCount * 50) + (graph.EdgeCount * 40) + 200, 1000);
+        // Detect multi-solution graphs
+        var uniqueSolutions = graph.Vertices
+            .Select(v => v.SolutionName)
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(s => s)
+            .ToList();
+
+        bool isMultiSolution = uniqueSolutions.Count > 1;
+
+        // Create solution-to-color mapping for consistent coloring
+        var solutionColorMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        for (int i = 0; i < uniqueSolutions.Count; i++)
+        {
+            solutionColorMap[uniqueSolutions[i]] = SolutionNodeColors[i % SolutionNodeColors.Length];
+        }
+
+        // Estimate capacity: ~80 chars per node + ~60 chars per edge + legend + 300 for header/footer
+        var estimatedCapacity = Math.Max((graph.VertexCount * 80) + (graph.EdgeCount * 60) + (uniqueSolutions.Count * 100) + 300, 1000);
         var builder = new StringBuilder(estimatedCapacity);
 
         // Header
@@ -81,20 +114,53 @@ public class DotGenerator : IDotGenerator
         builder.AppendLine("    nodesep=0.5;");
         builder.AppendLine("    ranksep=1.0;");
         builder.AppendLine();
-        builder.AppendLine("    node [shape=box, style=filled, fillcolor=lightblue];");
-        builder.AppendLine("    edge [color=black, arrowhead=normal];");
+        builder.AppendLine("    node [shape=box, style=filled];");
+        builder.AppendLine("    edge [arrowhead=normal];");
         builder.AppendLine();
 
-        // Nodes
+        // Add legend for multi-solution graphs
+        if (isMultiSolution)
+        {
+            builder.AppendLine("    // Legend - Solution Color Coding");
+            builder.AppendLine("    subgraph cluster_legend {");
+            builder.AppendLine("        label=\"Solutions\";");
+            builder.AppendLine("        style=dashed;");
+            builder.AppendLine("        color=gray;");
+            builder.AppendLine();
+
+            foreach (var solution in uniqueSolutions)
+            {
+                var color = solutionColorMap[solution];
+                var legendId = $"legend_{EscapeDotIdentifier(solution).Trim('"')}";
+                builder.AppendLine($"        {legendId} [label={EscapeDotIdentifier(solution)}, fillcolor=\"{color}\"];");
+            }
+
+            builder.AppendLine("    }");
+            builder.AppendLine();
+
+            _logger.LogDebug("Generated legend for {SolutionCount} solutions", uniqueSolutions.Count);
+        }
+
+        // Nodes with color coding based on solution
         foreach (var vertex in graph.Vertices)
         {
             var escapedName = EscapeDotIdentifier(vertex.ProjectName);
-            builder.AppendLine($"    {escapedName} [label={escapedName}];");
+
+            if (isMultiSolution && solutionColorMap.ContainsKey(vertex.SolutionName))
+            {
+                var color = solutionColorMap[vertex.SolutionName];
+                builder.AppendLine($"    {escapedName} [label={escapedName}, fillcolor=\"{color}\"];");
+            }
+            else
+            {
+                // Single solution or missing solution name - use default color
+                builder.AppendLine($"    {escapedName} [label={escapedName}, fillcolor=\"lightblue\"];");
+            }
         }
 
         builder.AppendLine();
 
-        // Edges with cross-solution color coding
+        // Edges with cross-solution highlighting
         var crossSolutionCount = 0;
         foreach (var edge in graph.Edges)
         {
@@ -103,26 +169,27 @@ public class DotGenerator : IDotGenerator
 
             if (edge.IsCrossSolution)
             {
-                var color = GetSolutionColor(edge.Source.SolutionName);
-                builder.AppendLine($"    {sourceEscaped} -> {targetEscaped} [color={color}];");
+                // Red color and bold style for cross-solution dependencies
+                builder.AppendLine($"    {sourceEscaped} -> {targetEscaped} [color=\"red\", style=\"bold\"];");
                 crossSolutionCount++;
             }
             else
             {
-                builder.AppendLine($"    {sourceEscaped} -> {targetEscaped};");
+                // Black color for intra-solution dependencies
+                builder.AppendLine($"    {sourceEscaped} -> {targetEscaped} [color=\"black\"];");
             }
         }
 
         if (crossSolutionCount > 0)
         {
-            _logger.LogDebug("Applied cross-solution color coding: {CrossSolutionCount} edges", crossSolutionCount);
+            _logger.LogDebug("Applied cross-solution highlighting: {CrossSolutionCount} edges marked in red", crossSolutionCount);
         }
 
         // Footer
         builder.AppendLine("}");
 
-        _logger.LogDebug("Generated {VertexCount} nodes and {EdgeCount} edges",
-            graph.VertexCount, graph.EdgeCount);
+        _logger.LogDebug("Generated {VertexCount} nodes and {EdgeCount} edges across {SolutionCount} solutions",
+            graph.VertexCount, graph.EdgeCount, uniqueSolutions.Count);
 
         return builder.ToString();
     }
@@ -134,22 +201,6 @@ public class DotGenerator : IDotGenerator
         return $"\"{escaped}\"";
     }
 
-    private static string GetSolutionColor(string solutionName)
-    {
-        ArgumentNullException.ThrowIfNull(solutionName);
-
-        // Use stable hash algorithm (character-based) to ensure same solution
-        // gets same color across platforms, .NET versions, and application runs
-        // This is critical for deterministic DOT file generation in CI/CD
-        int hash = 0;
-        foreach (char c in solutionName)
-        {
-            hash = unchecked((hash * 31) + char.ToUpperInvariant(c));
-        }
-
-        var index = Math.Abs(hash) % SolutionColors.Length;
-        return SolutionColors[index];
-    }
 
     private static string SanitizeFileName(string fileName)
     {

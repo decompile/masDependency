@@ -249,10 +249,10 @@ public class DotGeneratorTests
             var filePath = await _generator.GenerateAsync(graph, outputDir, "Test");
             var content = await File.ReadAllTextAsync(filePath);
 
-            // Assert - same-solution edges should not have [color=...] attribute
+            // Assert - same-solution edges should have black color (intra-solution dependencies)
             var lines = content.Split('\n');
             var edgeLine = lines.First(l => l.Contains("->") && l.Contains("ProjectA") && l.Contains("ProjectB"));
-            edgeLine.Should().NotContain("[color=");
+            edgeLine.Should().Contain("[color=\"black\"]");
         }
         finally
         {
@@ -415,8 +415,8 @@ public class DotGeneratorTests
             content.Should().Contain("rankdir=LR");
             content.Should().Contain("nodesep=0.5");
             content.Should().Contain("ranksep=1.0");
-            content.Should().Contain("node [shape=box, style=filled, fillcolor=lightblue]");
-            content.Should().Contain("edge [color=black, arrowhead=normal]");
+            content.Should().Contain("node [shape=box, style=filled]");
+            content.Should().Contain("edge [arrowhead=normal]");
         }
         finally
         {

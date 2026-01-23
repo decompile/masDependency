@@ -53,7 +53,14 @@ public class Program
         // Define options for analyze command
         var solutionOption = new Option<FileInfo?>("--solution")
         {
-            Description = "Path to .sln file (required)"
+            Description = "Path to .sln file (single solution analysis)"
+        };
+
+        var solutionsOption = new Option<FileInfo[]?>("--solutions")
+        {
+            Description = "Paths to multiple .sln files (multi-solution ecosystem analysis)",
+            AllowMultipleArgumentsPerToken = true,
+            Arity = ArgumentArity.OneOrMore
         };
 
         var outputOption = new Option<DirectoryInfo?>("--output")
@@ -87,6 +94,7 @@ public class Program
         var analyzeCommand = new Command("analyze", "Analyze solution dependencies")
         {
             solutionOption,
+            solutionsOption,
             outputOption,
             configOption,
             reportsOption,
@@ -124,6 +132,7 @@ public class Program
         services.TryAddTransient<ProjectFileSolutionLoader>(); // Transient: new instance per analysis
         services.TryAddTransient<FallbackSolutionLoader>(); // Orchestrator: new instance per analysis
         services.TryAddTransient<ISolutionLoader, FallbackSolutionLoader>(); // Primary interface implementation
+        services.TryAddSingleton<IMultiSolutionAnalyzer, MultiSolutionAnalyzer>(); // Multi-solution coordinator
         services.TryAddSingleton<MasDependencyMap.Core.Rendering.IGraphvizRenderer, MasDependencyMap.Core.Rendering.GraphvizRenderer>();
         services.TryAddSingleton<IDependencyGraphBuilder, DependencyGraphBuilder>();
         services.TryAddSingleton<IFrameworkFilter, FrameworkFilter>();
@@ -202,37 +211,62 @@ public class Program
 
             // Get option values
             var solution = parseResult.GetValue(solutionOption);
+            var solutions = parseResult.GetValue(solutionsOption);
             var output = parseResult.GetValue(outputOption);
             var config = parseResult.GetValue(configOption);
             var reports = parseResult.GetValue(reportsOption);
             var format = parseResult.GetValue(formatOption);
             var verbose = parseResult.GetValue(verboseOption);
 
-            // Validate required option BEFORE logging (to avoid confusing diagnostics)
-            if (solution == null)
+            // Validate that at least one solution source is provided
+            if (solution == null && (solutions == null || solutions.Length == 0))
             {
-                ansiConsole.MarkupLine("[red]Error:[/] --solution is required");
-                ansiConsole.MarkupLine("[dim]Reason:[/] The analyze command requires a solution file path");
-                ansiConsole.MarkupLine("[dim]Suggestion:[/] Use --solution path/to/your.sln");
+                ansiConsole.MarkupLine("[red]Error:[/] Either --solution or --solutions is required");
+                ansiConsole.MarkupLine("[dim]Reason:[/] The analyze command requires at least one solution file path");
+                ansiConsole.MarkupLine("[dim]Suggestion:[/] Use --solution path/to/your.sln OR --solutions path/to/sol1.sln path/to/sol2.sln");
                 return 1;
             }
 
-            if (!solution.Exists)
+            // Validate that both options aren't used together
+            if (solution != null && solutions != null && solutions.Length > 0)
             {
-                ansiConsole.MarkupLine($"[red]Error:[/] Solution file not found");
-                ansiConsole.MarkupLine($"[dim]Reason:[/] No file exists at {solution.FullName}");
-                ansiConsole.MarkupLine("[dim]Suggestion:[/] Verify the path and try again");
+                ansiConsole.MarkupLine("[red]Error:[/] Cannot use both --solution and --solutions");
+                ansiConsole.MarkupLine("[dim]Reason:[/] Use --solution for single solution OR --solutions for multiple solutions");
+                ansiConsole.MarkupLine("[dim]Suggestion:[/] Choose one option based on your analysis needs");
                 return 1;
             }
 
-            // Example structured logging (for demonstration - typically commented in production)
-            // Uncomment these lines to see structured logging in action with --verbose flag
-            // logger.LogInformation("Analyze command invoked with solution: {SolutionPath}", solution.FullName);
-            // logger.LogDebug("Configuration - Reports: {Reports}, Format: {Format}", reports ?? "N/A", format ?? "N/A");
+            // Determine if single or multi-solution analysis
+            bool isMultiSolution = solutions != null && solutions.Length > 0;
+            var solutionFiles = isMultiSolution ? solutions! : new[] { solution! };
+
+            // Validate all solution files exist
+            var missingSolutions = solutionFiles.Where(s => !s.Exists).ToList();
+            if (missingSolutions.Any())
+            {
+                ansiConsole.MarkupLine("[red]Error:[/] Solution file(s) not found");
+                foreach (var missing in missingSolutions)
+                {
+                    ansiConsole.MarkupLine($"[dim]  - {missing.FullName}[/]");
+                }
+                ansiConsole.MarkupLine("[dim]Suggestion:[/] Verify the paths and try again");
+                return 1;
+            }
 
             // Display parsed options using IAnsiConsole
             ansiConsole.MarkupLine("[bold green]Parsed Options:[/]");
-            ansiConsole.MarkupLine($"  [dim]Solution:[/] {solution?.FullName ?? "N/A"}");
+            if (isMultiSolution)
+            {
+                ansiConsole.MarkupLine($"  [dim]Solutions:[/] {solutions!.Length} files");
+                foreach (var sol in solutions!)
+                {
+                    ansiConsole.MarkupLine($"    [dim]- {sol.Name}[/]");
+                }
+            }
+            else
+            {
+                ansiConsole.MarkupLine($"  [dim]Solution:[/] {solution?.FullName ?? "N/A"}");
+            }
             ansiConsole.MarkupLine($"  [dim]Output:[/] {output?.FullName ?? "current directory"}");
             ansiConsole.MarkupLine($"  [dim]Config:[/] {config?.FullName ?? "none"}");
             ansiConsole.MarkupLine($"  [dim]Reports:[/] {reports}");
@@ -241,7 +275,8 @@ public class Program
             ansiConsole.MarkupLine("");
 
             // Show success message
-            ansiConsole.MarkupLine("[green]✓ Analysis command received successfully![/]");
+            var analysisType = isMultiSolution ? "Multi-solution ecosystem analysis" : "Single solution analysis";
+            ansiConsole.MarkupLine($"[green]✓ {analysisType} command received successfully![/]");
 
             return await Task.FromResult(0);
         });
