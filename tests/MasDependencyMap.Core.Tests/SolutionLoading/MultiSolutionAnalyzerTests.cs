@@ -28,8 +28,14 @@ public class MultiSolutionAnalyzerTests
     [Fact]
     public async Task LoadAllAsync_MultipleSolutions_ReturnsAllAnalyses()
     {
-        // Arrange
-        var paths = new[] { "Solution1.sln", "Solution2.sln" };
+        // Arrange - use temp directory for test isolation
+        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+        Directory.CreateDirectory(tempDir);
+        var paths = new[]
+        {
+            Path.Combine(tempDir, "Solution1.sln"),
+            Path.Combine(tempDir, "Solution2.sln")
+        };
 
         // Create temp files to satisfy File.Exists check
         foreach (var path in paths)
@@ -71,19 +77,18 @@ public class MultiSolutionAnalyzerTests
         finally
         {
             // Cleanup
-            foreach (var path in paths)
-            {
-                if (File.Exists(path))
-                    File.Delete(path);
-            }
+            if (Directory.Exists(tempDir))
+                Directory.Delete(tempDir, recursive: true);
         }
     }
 
     [Fact]
     public async Task LoadAllAsync_SingleSolution_ReturnsSingleAnalysis()
     {
-        // Arrange
-        var paths = new[] { "SingleSolution.sln" };
+        // Arrange - use temp directory for test isolation
+        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+        Directory.CreateDirectory(tempDir);
+        var paths = new[] { Path.Combine(tempDir, "SingleSolution.sln") };
         File.WriteAllText(paths[0], "");
 
         var analysis = new SolutionAnalysis
@@ -109,8 +114,8 @@ public class MultiSolutionAnalyzerTests
         }
         finally
         {
-            if (File.Exists(paths[0]))
-                File.Delete(paths[0]);
+            if (Directory.Exists(tempDir))
+                Directory.Delete(tempDir, recursive: true);
         }
     }
 
@@ -121,8 +126,15 @@ public class MultiSolutionAnalyzerTests
     [Fact]
     public async Task LoadAllAsync_OneSolutionFails_ContinuesWithRemaining()
     {
-        // Arrange
-        var paths = new[] { "Solution1.sln", "Solution2.sln", "Solution3.sln" };
+        // Arrange - use temp directory for test isolation
+        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+        Directory.CreateDirectory(tempDir);
+        var paths = new[]
+        {
+            Path.Combine(tempDir, "Solution1.sln"),
+            Path.Combine(tempDir, "Solution2.sln"),
+            Path.Combine(tempDir, "Solution3.sln")
+        };
 
         foreach (var path in paths)
         {
@@ -163,19 +175,22 @@ public class MultiSolutionAnalyzerTests
         }
         finally
         {
-            foreach (var path in paths)
-            {
-                if (File.Exists(path))
-                    File.Delete(path);
-            }
+            if (Directory.Exists(tempDir))
+                Directory.Delete(tempDir, recursive: true);
         }
     }
 
     [Fact]
     public async Task LoadAllAsync_AllSolutionsFail_ThrowsSolutionLoadException()
     {
-        // Arrange
-        var paths = new[] { "Solution1.sln", "Solution2.sln" };
+        // Arrange - use temp directory for test isolation
+        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+        Directory.CreateDirectory(tempDir);
+        var paths = new[]
+        {
+            Path.Combine(tempDir, "Solution1.sln"),
+            Path.Combine(tempDir, "Solution2.sln")
+        };
 
         foreach (var path in paths)
         {
@@ -197,11 +212,8 @@ public class MultiSolutionAnalyzerTests
         }
         finally
         {
-            foreach (var path in paths)
-            {
-                if (File.Exists(path))
-                    File.Delete(path);
-            }
+            if (Directory.Exists(tempDir))
+                Directory.Delete(tempDir, recursive: true);
         }
     }
 
@@ -269,8 +281,14 @@ public class MultiSolutionAnalyzerTests
     [Fact]
     public async Task LoadAllAsync_WithProgress_ReportsEachSolution()
     {
-        // Arrange
-        var paths = new[] { "Solution1.sln", "Solution2.sln" };
+        // Arrange - use temp directory for test isolation
+        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+        Directory.CreateDirectory(tempDir);
+        var paths = new[]
+        {
+            Path.Combine(tempDir, "Solution1.sln"),
+            Path.Combine(tempDir, "Solution2.sln")
+        };
 
         foreach (var path in paths)
         {
@@ -314,19 +332,22 @@ public class MultiSolutionAnalyzerTests
         }
         finally
         {
-            foreach (var path in paths)
-            {
-                if (File.Exists(path))
-                    File.Delete(path);
-            }
+            if (Directory.Exists(tempDir))
+                Directory.Delete(tempDir, recursive: true);
         }
     }
 
     [Fact]
     public async Task LoadAllAsync_WithProgressAndFailure_ReportsError()
     {
-        // Arrange
-        var paths = new[] { "Solution1.sln", "FailingSolution.sln" };
+        // Arrange - use temp directory for test isolation
+        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+        Directory.CreateDirectory(tempDir);
+        var paths = new[]
+        {
+            Path.Combine(tempDir, "Solution1.sln"),
+            Path.Combine(tempDir, "FailingSolution.sln")
+        };
 
         foreach (var path in paths)
         {
@@ -361,11 +382,8 @@ public class MultiSolutionAnalyzerTests
         }
         finally
         {
-            foreach (var path in paths)
-            {
-                if (File.Exists(path))
-                    File.Delete(path);
-            }
+            if (Directory.Exists(tempDir))
+                Directory.Delete(tempDir, recursive: true);
         }
     }
 

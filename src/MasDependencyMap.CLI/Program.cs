@@ -254,7 +254,7 @@ public class Program
             }
 
             // Display parsed options using IAnsiConsole
-            ansiConsole.MarkupLine("[bold green]Parsed Options:[/]");
+            ansiConsole.MarkupLine("[bold green]Starting Analysis:[/]");
             if (isMultiSolution)
             {
                 ansiConsole.MarkupLine($"  [dim]Solutions:[/] {solutions!.Length} files");
@@ -265,20 +265,151 @@ public class Program
             }
             else
             {
-                ansiConsole.MarkupLine($"  [dim]Solution:[/] {solution?.FullName ?? "N/A"}");
+                ansiConsole.MarkupLine($"  [dim]Solution:[/] {solution?.Name ?? "N/A"}");
             }
-            ansiConsole.MarkupLine($"  [dim]Output:[/] {output?.FullName ?? "current directory"}");
-            ansiConsole.MarkupLine($"  [dim]Config:[/] {config?.FullName ?? "none"}");
-            ansiConsole.MarkupLine($"  [dim]Reports:[/] {reports}");
-            ansiConsole.MarkupLine($"  [dim]Format:[/] {format}");
-            ansiConsole.MarkupLine($"  [dim]Verbose:[/] {verbose}");
+            var outputDir = output?.FullName ?? Directory.GetCurrentDirectory();
+            ansiConsole.MarkupLine($"  [dim]Output:[/] {outputDir}");
             ansiConsole.MarkupLine("");
 
-            // Show success message
-            var analysisType = isMultiSolution ? "Multi-solution ecosystem analysis" : "Single solution analysis";
-            ansiConsole.MarkupLine($"[green]✓ {analysisType} command received successfully![/]");
+            try
+            {
+                // Get required services
+                var solutionLoader = serviceProvider.GetRequiredService<ISolutionLoader>();
+                var multiSolutionAnalyzer = serviceProvider.GetRequiredService<IMultiSolutionAnalyzer>();
+                var graphBuilder = serviceProvider.GetRequiredService<IDependencyGraphBuilder>();
+                var frameworkFilter = serviceProvider.GetRequiredService<IFrameworkFilter>();
+                var dotGenerator = serviceProvider.GetRequiredService<IDotGenerator>();
+                var graphvizRenderer = serviceProvider.GetRequiredService<MasDependencyMap.Core.Rendering.IGraphvizRenderer>();
 
-            return await Task.FromResult(0);
+                // Check Graphviz availability
+                var isGraphvizInstalled = await graphvizRenderer.IsGraphvizInstalledAsync();
+                if (!isGraphvizInstalled)
+                {
+                    ansiConsole.MarkupLine("[yellow]Warning:[/] Graphviz not found - DOT file will be generated but not rendered to PNG/SVG");
+                    ansiConsole.MarkupLine("[dim]Suggestion:[/] Install Graphviz from https://graphviz.org/download/");
+                    ansiConsole.MarkupLine("");
+                }
+
+                string solutionName;
+                IReadOnlyList<SolutionAnalysis> solutionAnalyses;
+
+                if (isMultiSolution)
+                {
+                    // Multi-solution analysis with progress
+                    var solutionPaths = solutions!.Select(s => s.FullName).ToList();
+                    solutionName = "Ecosystem";
+
+                    IReadOnlyList<SolutionAnalysis> loadedSolutions = null!;
+                    await ansiConsole.Progress()
+                        .Columns(new ProgressColumn[]
+                        {
+                            new TaskDescriptionColumn(),
+                            new ProgressBarColumn(),
+                            new PercentageColumn(),
+                            new RemainingTimeColumn(),
+                            new SpinnerColumn()
+                        })
+                        .StartAsync(async ctx =>
+                        {
+                            var loadTask = ctx.AddTask($"[cyan]Loading solutions[/]", maxValue: solutionPaths.Count);
+                            var progressReporter = new Progress<SolutionLoadProgress>(progress =>
+                            {
+                                if (progress.IsComplete)
+                                {
+                                    if (string.IsNullOrEmpty(progress.ErrorMessage))
+                                    {
+                                        loadTask.Increment(1);
+                                        loadTask.Description = $"[cyan]Loading solutions[/] [green]✓[/] {progress.CurrentFileName} ({progress.ProjectCount} projects)";
+                                    }
+                                    else
+                                    {
+                                        loadTask.Increment(1);
+                                        loadTask.Description = $"[cyan]Loading solutions[/] [red]✗[/] {progress.CurrentFileName}";
+                                    }
+                                }
+                                else
+                                {
+                                    loadTask.Description = $"[cyan]Loading[/] {progress.CurrentFileName}...";
+                                }
+                            });
+
+                            loadedSolutions = await multiSolutionAnalyzer.LoadAllAsync(solutionPaths, progressReporter, cancellationToken)
+                                .ConfigureAwait(false);
+
+                            loadTask.StopTask();
+                            loadTask.Description = $"[green]✓[/] Loaded {loadedSolutions.Count}/{solutionPaths.Count} solutions";
+                        });
+
+                    solutionAnalyses = loadedSolutions;
+                }
+                else
+                {
+                    // Single solution analysis
+                    solutionName = Path.GetFileNameWithoutExtension(solution!.Name);
+                    ansiConsole.MarkupLine($"[cyan]Loading solution[/] {solution!.Name}...");
+                    var analysis = await solutionLoader.LoadAsync(solution.FullName, cancellationToken);
+                    solutionAnalyses = new[] { analysis };
+                    ansiConsole.MarkupLine($"[green]✓[/] Loaded solution: {analysis.Projects.Count} projects");
+                }
+
+                // Build dependency graph
+                ansiConsole.MarkupLine("[cyan]Building dependency graph...[/]");
+                var graph = await graphBuilder.BuildAsync(solutionAnalyses, cancellationToken);
+                ansiConsole.MarkupLine($"[green]✓[/] Built graph: {graph.VertexCount} projects, {graph.EdgeCount} dependencies");
+
+                // Filter framework dependencies
+                var filteredGraph = await frameworkFilter.FilterAsync(graph, cancellationToken);
+                var removedCount = graph.EdgeCount - filteredGraph.EdgeCount;
+                ansiConsole.MarkupLine($"[green]✓[/] Filtered {removedCount} framework dependencies");
+
+                // Generate DOT file
+                var dotFilePath = await dotGenerator.GenerateAsync(filteredGraph, outputDir, solutionName, cancellationToken);
+                ansiConsole.MarkupLine($"[green]✓[/] Generated DOT file: {Path.GetFileName(dotFilePath)}");
+
+                // Render to image formats if Graphviz is available
+                if (isGraphvizInstalled)
+                {
+                    var shouldRenderPng = format == "png" || format == "both";
+                    var shouldRenderSvg = format == "svg" || format == "both";
+
+                    if (shouldRenderPng)
+                    {
+                        var pngPath = await graphvizRenderer.RenderToFileAsync(dotFilePath, GraphvizOutputFormat.Png, cancellationToken);
+                        ansiConsole.MarkupLine($"[green]✓[/] Rendered PNG: {Path.GetFileName(pngPath)}");
+                    }
+
+                    if (shouldRenderSvg)
+                    {
+                        var svgPath = await graphvizRenderer.RenderToFileAsync(dotFilePath, GraphvizOutputFormat.Svg, cancellationToken);
+                        ansiConsole.MarkupLine($"[green]✓[/] Rendered SVG: {Path.GetFileName(svgPath)}");
+                    }
+                }
+
+                ansiConsole.MarkupLine("");
+                ansiConsole.MarkupLine("[bold green]✓ Analysis complete![/]");
+                return 0;
+            }
+            catch (SolutionLoadException ex)
+            {
+                ansiConsole.MarkupLine("[red]Error:[/] Failed to load solution(s)");
+                ansiConsole.MarkupLine($"[dim]Reason:[/] {ex.Message.EscapeMarkup()}");
+                ansiConsole.MarkupLine("[dim]Suggestion:[/] Check solution file paths and try again");
+                logger.LogError(ex, "Solution load failed");
+                return 1;
+            }
+            catch (GraphvizNotFoundException ex)
+            {
+                ansiConsole.MarkupLine("[red]Error:[/] Graphviz not found");
+                ansiConsole.MarkupLine($"[dim]Reason:[/] {ex.Message.EscapeMarkup()}");
+                return 1;
+            }
+            catch (Exception ex)
+            {
+                ansiConsole.MarkupLine("[red]Error:[/] Analysis failed");
+                ansiConsole.MarkupLine($"[dim]Details:[/] {ex.Message.EscapeMarkup()}");
+                logger.LogError(ex, "Unexpected error during analysis");
+                return 1;
+            }
         });
 
         // Set up action for root command (handles --version and no command cases)

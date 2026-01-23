@@ -498,6 +498,73 @@ public class DotGeneratorTests
         }
     }
 
+    [Fact]
+    public async Task GenerateAsync_MultiSolutionGraph_GeneratesEcosystemFilename()
+    {
+        // Arrange - create multi-solution graph with projects from different solutions
+        var graph = CreateMultiSolutionGraph();
+        var outputDir = Path.Combine(Path.GetTempPath(), "dot-test-" + Guid.NewGuid());
+        var solutionName = "Solution1"; // Any name, should be ignored for multi-solution
+
+        try
+        {
+            // Act
+            var filePath = await _generator.GenerateAsync(graph, outputDir, solutionName);
+
+            // Assert
+            filePath.Should().NotBeNullOrEmpty();
+            Path.GetFileName(filePath).Should().Be("Ecosystem-dependencies.dot", "multi-solution graphs should use 'Ecosystem-dependencies.dot' naming");
+
+            // Verify file content includes legend
+            var content = await File.ReadAllTextAsync(filePath);
+            content.Should().Contain("subgraph cluster_legend", "multi-solution graphs should include legend");
+            content.Should().Contain("Solutions", "legend should show solution names");
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(outputDir))
+                    Directory.Delete(outputDir, true);
+            }
+            catch
+            {
+                // Ignore cleanup errors
+            }
+        }
+    }
+
+    [Fact]
+    public async Task GenerateAsync_SingleSolutionGraph_GeneratesSolutionNamedFile()
+    {
+        // Arrange - create single-solution graph
+        var graph = CreateSimpleGraph();
+        var outputDir = Path.Combine(Path.GetTempPath(), "dot-test-" + Guid.NewGuid());
+        var solutionName = "MySolution";
+
+        try
+        {
+            // Act
+            var filePath = await _generator.GenerateAsync(graph, outputDir, solutionName);
+
+            // Assert
+            filePath.Should().NotBeNullOrEmpty();
+            Path.GetFileName(filePath).Should().Be("MySolution-dependencies.dot", "single-solution graphs should use '{SolutionName}-dependencies.dot' naming");
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(outputDir))
+                    Directory.Delete(outputDir, true);
+            }
+            catch
+            {
+                // Ignore cleanup errors
+            }
+        }
+    }
+
     private DependencyGraph CreateSimpleGraph()
     {
         var graph = new DependencyGraph();
@@ -567,6 +634,54 @@ public class DotGeneratorTests
         {
             Source = nodeA,
             Target = nodeB,
+            DependencyType = DependencyType.ProjectReference
+        });
+
+        return graph;
+    }
+
+    private DependencyGraph CreateMultiSolutionGraph()
+    {
+        // Create graph with projects from 3 different solutions
+        var graph = new DependencyGraph();
+
+        var nodeA = new ProjectNode
+        {
+            ProjectName = "ProjectA",
+            ProjectPath = "/path/to/ProjectA.csproj",
+            TargetFramework = "net8.0",
+            SolutionName = "Solution1"
+        };
+        var nodeB = new ProjectNode
+        {
+            ProjectName = "ProjectB",
+            ProjectPath = "/path/to/ProjectB.csproj",
+            TargetFramework = "net8.0",
+            SolutionName = "Solution2"
+        };
+        var nodeC = new ProjectNode
+        {
+            ProjectName = "ProjectC",
+            ProjectPath = "/path/to/ProjectC.csproj",
+            TargetFramework = "net8.0",
+            SolutionName = "Solution3"
+        };
+
+        graph.AddVertex(nodeA);
+        graph.AddVertex(nodeB);
+        graph.AddVertex(nodeC);
+
+        // Add cross-solution edges
+        graph.AddEdge(new DependencyEdge
+        {
+            Source = nodeA,
+            Target = nodeB,
+            DependencyType = DependencyType.ProjectReference
+        });
+        graph.AddEdge(new DependencyEdge
+        {
+            Source = nodeB,
+            Target = nodeC,
             DependencyType = DependencyType.ProjectReference
         });
 

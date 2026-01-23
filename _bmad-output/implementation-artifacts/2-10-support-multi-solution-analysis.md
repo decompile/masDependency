@@ -1,6 +1,6 @@
 # Story 2.10: Support Multi-Solution Analysis
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -1495,14 +1495,17 @@ N/A - No blocking issues encountered
 
 ✅ **CLI Enhanced:**
 - Added --solutions option for multi-solution analysis
+- **IMPLEMENTED** full end-to-end multi-solution analysis workflow
+- Spectre.Console progress indicators with real-time updates
 - Maintained backward compatibility with --solution (single)
 - Comprehensive validation: mutually exclusive options, file existence checks
 - Clear error messages following project-context.md 3-part structure
+- Complete pipeline: LoadAllAsync → BuildAsync → FilterAsync → GenerateAsync → RenderToFileAsync
 
 ✅ **Graph Infrastructure Extended:**
-- DependencyGraphBuilder multi-solution overload (already existed)
-- ProjectNode.SolutionName property (already existed)
-- DependencyEdge.IsCrossSolution computed property (already existed)
+- DependencyGraphBuilder multi-solution overload (`BuildAsync(IEnumerable<SolutionAnalysis>)` created in this story)
+- ProjectNode.SolutionName property (pre-existing from earlier story)
+- DependencyEdge.IsCrossSolution computed property (pre-existing from earlier story)
 - Cross-solution dependency detection and logging
 
 ✅ **Visualization Enhanced:**
@@ -1511,6 +1514,7 @@ N/A - No blocking issues encountered
 - Cross-solution edges highlighted in red with bold style
 - Intra-solution edges rendered in black
 - "Ecosystem-dependencies.dot" naming for multi-solution graphs
+- **FIXED** code duplication: multi-solution detection refactored to single location with out parameter
 
 ✅ **DI Registration:**
 - IMultiSolutionAnalyzer → MultiSolutionAnalyzer registered as singleton
@@ -1519,9 +1523,10 @@ N/A - No blocking issues encountered
 ✅ **Comprehensive Testing:**
 - 12 new unit tests for MultiSolutionAnalyzer
 - Tests for graceful degradation, progress reporting, validation
-- Tests for multi-solution graph building (already existed)
-- Updated 2 existing DotGenerator tests to match new format
-- **All 183 tests passing**
+- Tests for multi-solution graph building (pre-existing)
+- **ADDED** 2 new tests for Ecosystem filename verification
+- **FIXED** test hygiene: all tests now use isolated temp directories (no working directory pollution)
+- **All 185 tests passing** (was 183, added 2 new tests)
 
 **Key Implementation Decisions:**
 1. Sequential loading (not parallel) - Roslyn MSBuildWorkspace is not thread-safe
@@ -1548,9 +1553,10 @@ N/A - No blocking issues encountered
 - tests/MasDependencyMap.Core.Tests/SolutionLoading/MultiSolutionAnalyzerTests.cs
 
 **Files Modified:**
-- src/MasDependencyMap.Core/Visualization/DotGenerator.cs
-- src/MasDependencyMap.CLI/Program.cs
-- tests/MasDependencyMap.Core.Tests/Visualization/DotGeneratorTests.cs
+- src/MasDependencyMap.Core/Visualization/DotGenerator.cs (extended with multi-solution support and fixed code duplication)
+- src/MasDependencyMap.CLI/Program.cs (implemented full multi-solution analysis workflow with Spectre.Console progress)
+- tests/MasDependencyMap.Core.Tests/SolutionLoading/MultiSolutionAnalyzerTests.cs (fixed test hygiene - proper temp directories)
+- tests/MasDependencyMap.Core.Tests/Visualization/DotGeneratorTests.cs (added Ecosystem filename tests)
 
 **Files Reused (No Changes):**
 - src/MasDependencyMap.Core/DependencyAnalysis/IDependencyGraphBuilder.cs

@@ -46,17 +46,8 @@ public class DotGenerator : IDotGenerator
             _logger.LogWarning("Empty graph - no nodes or edges to visualize");
         }
 
-        // Detect if multi-solution by checking for multiple unique solution names
-        var uniqueSolutions = graph.Vertices
-            .Select(v => v.SolutionName)
-            .Where(s => !string.IsNullOrWhiteSpace(s))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .Count();
-
-        bool isMultiSolution = uniqueSolutions > 1;
-
         // Build DOT content
-        var dotContent = BuildDotContent(graph);
+        var dotContent = BuildDotContent(graph, out bool isMultiSolution);
 
         // Prepare output path with multi-solution naming support
         var sanitizedSolutionName = SanitizeFileName(solutionName);
@@ -85,7 +76,7 @@ public class DotGenerator : IDotGenerator
         }
     }
 
-    private string BuildDotContent(DependencyGraph graph)
+    private string BuildDotContent(DependencyGraph graph, out bool isMultiSolution)
     {
         // Detect multi-solution graphs
         var uniqueSolutions = graph.Vertices
@@ -95,7 +86,7 @@ public class DotGenerator : IDotGenerator
             .OrderBy(s => s)
             .ToList();
 
-        bool isMultiSolution = uniqueSolutions.Count > 1;
+        isMultiSolution = uniqueSolutions.Count > 1;
 
         // Create solution-to-color mapping for consistent coloring
         var solutionColorMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -105,7 +96,7 @@ public class DotGenerator : IDotGenerator
         }
 
         // Estimate capacity: ~80 chars per node + ~60 chars per edge + legend + 300 for header/footer
-        var estimatedCapacity = Math.Max((graph.VertexCount * 80) + (graph.EdgeCount * 60) + (uniqueSolutions.Count * 100) + 300, 1000);
+        var estimatedCapacity = (graph.VertexCount * 80) + (graph.EdgeCount * 60) + (uniqueSolutions.Count * 100) + 300;
         var builder = new StringBuilder(estimatedCapacity);
 
         // Header
