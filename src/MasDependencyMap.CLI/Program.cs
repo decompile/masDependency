@@ -1,5 +1,6 @@
 using MasDependencyMap.Core.Configuration;
 using MasDependencyMap.Core.DependencyAnalysis;
+using MasDependencyMap.Core.Filtering;
 using MasDependencyMap.Core.SolutionLoading;
 using MasDependencyMap.Core.Visualization;
 using Microsoft.Build.Locator;
@@ -124,6 +125,7 @@ public class Program
         services.TryAddTransient<ISolutionLoader, FallbackSolutionLoader>(); // Primary interface implementation
         services.TryAddSingleton<IGraphvizRenderer, GraphvizRenderer>();
         services.TryAddSingleton<IDependencyGraphBuilder, DependencyGraphBuilder>();
+        services.TryAddSingleton<IFrameworkFilter, FrameworkFilter>();
 
         // Register FilterConfiguration with validation
         services
