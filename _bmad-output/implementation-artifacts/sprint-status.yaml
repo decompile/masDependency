@@ -59,7 +59,7 @@ development_status:
   2-5-build-dependency-graph-with-quikgraph: done
   2-6-implement-framework-dependency-filter: done
   2-7-implement-graphviz-detection-and-installation-validation: done
-  2-8-generate-dot-format-from-dependency-graph: backlog
+  2-8-generate-dot-format-from-dependency-graph: review
   2-9-render-dot-files-to-png-and-svg-with-graphviz: backlog
   2-10-support-multi-solution-analysis: backlog
   epic-2-retrospective: optional

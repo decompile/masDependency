@@ -124,9 +124,10 @@ public class Program
         services.TryAddTransient<ProjectFileSolutionLoader>(); // Transient: new instance per analysis
         services.TryAddTransient<FallbackSolutionLoader>(); // Orchestrator: new instance per analysis
         services.TryAddTransient<ISolutionLoader, FallbackSolutionLoader>(); // Primary interface implementation
-        services.TryAddSingleton<IGraphvizRenderer, GraphvizRenderer>();
+        services.TryAddSingleton<MasDependencyMap.Core.Rendering.IGraphvizRenderer, MasDependencyMap.Core.Rendering.GraphvizRenderer>();
         services.TryAddSingleton<IDependencyGraphBuilder, DependencyGraphBuilder>();
         services.TryAddSingleton<IFrameworkFilter, FrameworkFilter>();
+        services.TryAddSingleton<MasDependencyMap.Core.Visualization.IDotGenerator, MasDependencyMap.Core.Visualization.DotGenerator>();
 
         // Register FilterConfiguration with validation
         services
@@ -164,7 +165,7 @@ public class Program
 
             // Validate DI container can resolve all critical services
             _ = serviceProvider.GetRequiredService<ISolutionLoader>();
-            _ = serviceProvider.GetRequiredService<IGraphvizRenderer>();
+            _ = serviceProvider.GetRequiredService<MasDependencyMap.Core.Rendering.IGraphvizRenderer>();
             _ = serviceProvider.GetRequiredService<IDependencyGraphBuilder>();
             _ = serviceProvider.GetRequiredService<ILogger<Program>>();
         }
