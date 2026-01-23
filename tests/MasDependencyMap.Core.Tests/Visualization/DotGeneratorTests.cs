@@ -41,8 +41,15 @@ public class DotGeneratorTests
         }
         finally
         {
-            if (Directory.Exists(outputDir))
-                Directory.Delete(outputDir, true);
+            try
+            {
+                if (Directory.Exists(outputDir))
+                    Directory.Delete(outputDir, true);
+            }
+            catch
+            {
+                // Ignore cleanup errors to avoid masking test failures
+            }
         }
     }
 
@@ -148,8 +155,15 @@ public class DotGeneratorTests
         }
         finally
         {
-            if (Directory.Exists(outputDir))
-                Directory.Delete(outputDir, true);
+            try
+            {
+                if (Directory.Exists(outputDir))
+                    Directory.Delete(outputDir, true);
+            }
+            catch
+            {
+                // Ignore cleanup errors to avoid masking test failures
+            }
         }
     }
 
@@ -180,8 +194,15 @@ public class DotGeneratorTests
         }
         finally
         {
-            if (Directory.Exists(outputDir))
-                Directory.Delete(outputDir, true);
+            try
+            {
+                if (Directory.Exists(outputDir))
+                    Directory.Delete(outputDir, true);
+            }
+            catch
+            {
+                // Ignore cleanup errors to avoid masking test failures
+            }
         }
     }
 
@@ -203,8 +224,15 @@ public class DotGeneratorTests
         }
         finally
         {
-            if (Directory.Exists(outputDir))
-                Directory.Delete(outputDir, true);
+            try
+            {
+                if (Directory.Exists(outputDir))
+                    Directory.Delete(outputDir, true);
+            }
+            catch
+            {
+                // Ignore cleanup errors to avoid masking test failures
+            }
         }
     }
 
@@ -228,8 +256,15 @@ public class DotGeneratorTests
         }
         finally
         {
-            if (Directory.Exists(outputDir))
-                Directory.Delete(outputDir, true);
+            try
+            {
+                if (Directory.Exists(outputDir))
+                    Directory.Delete(outputDir, true);
+            }
+            catch
+            {
+                // Ignore cleanup errors to avoid masking test failures
+            }
         }
     }
 
@@ -251,9 +286,16 @@ public class DotGeneratorTests
         }
         finally
         {
-            var topDir = Path.Combine(Path.GetTempPath(), "dot-test-" + Path.GetFileName(Path.GetDirectoryName(Path.GetDirectoryName(outputDir))!));
-            if (Directory.Exists(topDir))
-                Directory.Delete(topDir, true);
+            try
+            {
+                var topDir = Path.Combine(Path.GetTempPath(), "dot-test-" + Path.GetFileName(Path.GetDirectoryName(Path.GetDirectoryName(outputDir))!));
+                if (Directory.Exists(topDir))
+                    Directory.Delete(topDir, true);
+            }
+            catch
+            {
+                // Ignore cleanup errors to avoid masking test failures
+            }
         }
     }
 
@@ -279,8 +321,15 @@ public class DotGeneratorTests
         }
         finally
         {
-            if (Directory.Exists(outputDir))
-                Directory.Delete(outputDir, true);
+            try
+            {
+                if (Directory.Exists(outputDir))
+                    Directory.Delete(outputDir, true);
+            }
+            catch
+            {
+                // Ignore cleanup errors to avoid masking test failures
+            }
         }
     }
 
@@ -304,8 +353,15 @@ public class DotGeneratorTests
         }
         finally
         {
-            if (Directory.Exists(outputDir))
-                Directory.Delete(outputDir, true);
+            try
+            {
+                if (Directory.Exists(outputDir))
+                    Directory.Delete(outputDir, true);
+            }
+            catch
+            {
+                // Ignore cleanup errors to avoid masking test failures
+            }
         }
     }
 
@@ -330,8 +386,15 @@ public class DotGeneratorTests
         }
         finally
         {
-            if (Directory.Exists(outputDir))
-                Directory.Delete(outputDir, true);
+            try
+            {
+                if (Directory.Exists(outputDir))
+                    Directory.Delete(outputDir, true);
+            }
+            catch
+            {
+                // Ignore cleanup errors to avoid masking test failures
+            }
         }
     }
 
@@ -357,8 +420,15 @@ public class DotGeneratorTests
         }
         finally
         {
-            if (Directory.Exists(outputDir))
-                Directory.Delete(outputDir, true);
+            try
+            {
+                if (Directory.Exists(outputDir))
+                    Directory.Delete(outputDir, true);
+            }
+            catch
+            {
+                // Ignore cleanup errors to avoid masking test failures
+            }
         }
     }
 
@@ -380,9 +450,51 @@ public class DotGeneratorTests
         }
         finally
         {
-            var absoluteDir = Path.GetFullPath(outputDir);
-            if (Directory.Exists(absoluteDir))
-                Directory.Delete(absoluteDir, true);
+            try
+            {
+                var absoluteDir = Path.GetFullPath(outputDir);
+                if (Directory.Exists(absoluteDir))
+                    Directory.Delete(absoluteDir, true);
+            }
+            catch
+            {
+                // Ignore cleanup errors to avoid masking test failures
+            }
+        }
+    }
+
+    [Fact]
+    public async Task GenerateAsync_CancelledToken_ThrowsOperationCanceledException()
+    {
+        // Arrange
+        var graph = CreateSimpleGraph();
+        var outputDir = Path.Combine(Path.GetTempPath(), "dot-test-" + Guid.NewGuid());
+        var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        try
+        {
+            // Act
+            Func<Task> act = async () => await _generator.GenerateAsync(
+                graph,
+                outputDir,
+                "Test",
+                cts.Token);
+
+            // Assert
+            await act.Should().ThrowAsync<OperationCanceledException>();
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(outputDir))
+                    Directory.Delete(outputDir, true);
+            }
+            catch
+            {
+                // Ignore cleanup errors
+            }
         }
     }
 

@@ -42,19 +42,19 @@ public class DotGenerator : IDotGenerator
             _logger.LogWarning("Empty graph - no nodes or edges to visualize");
         }
 
+        // Build DOT content
+        var dotContent = BuildDotContent(graph);
+
+        // Prepare output path
+        var sanitizedSolutionName = SanitizeFileName(solutionName);
+        var fileName = $"{sanitizedSolutionName}-dependencies.dot";
+        var absoluteOutputDir = Path.GetFullPath(outputDirectory);
+        Directory.CreateDirectory(absoluteOutputDir);
+        var filePath = Path.Combine(absoluteOutputDir, fileName);
+
+        // Write to file
         try
         {
-            // Build DOT content
-            var dotContent = BuildDotContent(graph);
-
-            // Prepare output path
-            var sanitizedSolutionName = SanitizeFileName(solutionName);
-            var fileName = $"{sanitizedSolutionName}-dependencies.dot";
-            var absoluteOutputDir = Path.GetFullPath(outputDirectory);
-            Directory.CreateDirectory(absoluteOutputDir);
-            var filePath = Path.Combine(absoluteOutputDir, fileName);
-
-            // Write to file
             await File.WriteAllTextAsync(filePath, dotContent, Encoding.UTF8, cancellationToken)
                 .ConfigureAwait(false);
 
@@ -65,13 +65,15 @@ public class DotGenerator : IDotGenerator
         }
         catch (IOException ex)
         {
-            throw new DotGenerationException($"Failed to write DOT file to {outputDirectory}: {ex.Message}", ex);
+            throw new DotGenerationException($"Failed to write DOT file to '{filePath}': {ex.Message}", ex);
         }
     }
 
     private string BuildDotContent(DependencyGraph graph)
     {
-        var builder = new StringBuilder();
+        // Estimate capacity: ~50 chars per node + ~40 chars per edge + 200 for header/footer
+        var estimatedCapacity = Math.Max((graph.VertexCount * 50) + (graph.EdgeCount * 40) + 200, 1000);
+        var builder = new StringBuilder(estimatedCapacity);
 
         // Header
         builder.AppendLine("digraph dependencies {");
@@ -113,13 +115,13 @@ public class DotGenerator : IDotGenerator
 
         if (crossSolutionCount > 0)
         {
-            _logger.LogInformation("Applied cross-solution color coding: {CrossSolutionCount} edges", crossSolutionCount);
+            _logger.LogDebug("Applied cross-solution color coding: {CrossSolutionCount} edges", crossSolutionCount);
         }
 
         // Footer
         builder.AppendLine("}");
 
-        _logger.LogInformation("Generated {VertexCount} nodes and {EdgeCount} edges",
+        _logger.LogDebug("Generated {VertexCount} nodes and {EdgeCount} edges",
             graph.VertexCount, graph.EdgeCount);
 
         return builder.ToString();
@@ -134,13 +136,30 @@ public class DotGenerator : IDotGenerator
 
     private static string GetSolutionColor(string solutionName)
     {
-        var hash = Math.Abs(solutionName.GetHashCode());
-        return SolutionColors[hash % SolutionColors.Length];
+        ArgumentNullException.ThrowIfNull(solutionName);
+
+        // Use stable hash algorithm (character-based) to ensure same solution
+        // gets same color across platforms, .NET versions, and application runs
+        // This is critical for deterministic DOT file generation in CI/CD
+        int hash = 0;
+        foreach (char c in solutionName)
+        {
+            hash = unchecked((hash * 31) + char.ToUpperInvariant(c));
+        }
+
+        var index = Math.Abs(hash) % SolutionColors.Length;
+        return SolutionColors[index];
     }
 
     private static string SanitizeFileName(string fileName)
     {
+        if (string.IsNullOrWhiteSpace(fileName))
+            return "output";
+
         var invalidChars = Path.GetInvalidFileNameChars();
-        return string.Join("_", fileName.Split(invalidChars, StringSplitOptions.RemoveEmptyEntries));
+        var sanitized = string.Join("_", fileName.Split(invalidChars, StringSplitOptions.RemoveEmptyEntries));
+
+        // Handle edge case where all characters were invalid
+        return string.IsNullOrWhiteSpace(sanitized) ? "output" : sanitized;
     }
 }
