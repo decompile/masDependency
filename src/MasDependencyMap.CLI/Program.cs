@@ -142,6 +142,7 @@ public class Program
         services.TryAddSingleton<ICycleStatisticsCalculator, CycleStatisticsCalculator>();
         services.TryAddSingleton<ICouplingAnalyzer, RoslynCouplingAnalyzer>();
         services.TryAddSingleton<IWeakEdgeIdentifier, WeakEdgeIdentifier>();
+        services.TryAddSingleton<IRecommendationGenerator, RecommendationGenerator>();
 
         // Register FilterConfiguration with validation
         services
