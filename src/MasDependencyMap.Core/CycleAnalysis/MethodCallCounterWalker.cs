@@ -26,7 +26,7 @@ internal sealed class MethodCallCounterWalker : CSharpSyntaxWalker
     {
         _semanticModel = semanticModel ?? throw new ArgumentNullException(nameof(semanticModel));
         _sourceAssembly = sourceAssembly ?? throw new ArgumentNullException(nameof(sourceAssembly));
-        _callCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        _callCounts = new Dictionary<string, int>(StringComparer.Ordinal); // Assembly names are case-sensitive
     }
 
     /// <summary>
@@ -90,5 +90,121 @@ internal sealed class MethodCallCounterWalker : CSharpSyntaxWalker
 
         // Continue walking the syntax tree
         base.VisitObjectCreationExpression(node);
+    }
+
+    /// <summary>
+    /// Visits member access expressions to count property getter calls across assembly boundaries.
+    /// Property access like target.Property compiles to get_Property() method call.
+    /// </summary>
+    /// <param name="node">The member access expression syntax node.</param>
+    public override void VisitMemberAccessExpression(MemberAccessExpressionSyntax node)
+    {
+        var symbolInfo = _semanticModel.GetSymbolInfo(node);
+
+        // Check if this is a property access (property getters/setters are method calls)
+        if (symbolInfo.Symbol is IPropertySymbol propertySymbol)
+        {
+            var targetAssembly = propertySymbol.ContainingAssembly;
+
+            // Check if property belongs to a different assembly
+            if (targetAssembly != null &&
+                !SymbolEqualityComparer.Default.Equals(_sourceAssembly, targetAssembly))
+            {
+                var targetAssemblyName = targetAssembly.Name;
+
+                // Increment call count for property access (getter or setter)
+                _callCounts[targetAssemblyName] = _callCounts.GetValueOrDefault(targetAssemblyName) + 1;
+            }
+        }
+
+        // Continue walking the syntax tree
+        base.VisitMemberAccessExpression(node);
+    }
+
+    /// <summary>
+    /// Visits element access expressions to count indexer calls across assembly boundaries.
+    /// Indexer usage like target[index] compiles to get_Item() or set_Item() method call.
+    /// </summary>
+    /// <param name="node">The element access expression syntax node.</param>
+    public override void VisitElementAccessExpression(ElementAccessExpressionSyntax node)
+    {
+        var symbolInfo = _semanticModel.GetSymbolInfo(node);
+
+        // Indexers resolve to property symbols (with get/set accessors)
+        if (symbolInfo.Symbol is IPropertySymbol indexerSymbol)
+        {
+            var targetAssembly = indexerSymbol.ContainingAssembly;
+
+            // Check if indexer belongs to a different assembly
+            if (targetAssembly != null &&
+                !SymbolEqualityComparer.Default.Equals(_sourceAssembly, targetAssembly))
+            {
+                var targetAssemblyName = targetAssembly.Name;
+
+                // Increment call count for indexer access
+                _callCounts[targetAssemblyName] = _callCounts.GetValueOrDefault(targetAssemblyName) + 1;
+            }
+        }
+
+        // Continue walking the syntax tree
+        base.VisitElementAccessExpression(node);
+    }
+
+    /// <summary>
+    /// Visits binary expressions to count operator overload calls across assembly boundaries.
+    /// Binary operators like a + b can be overloaded and compile to op_Addition() method calls.
+    /// </summary>
+    /// <param name="node">The binary expression syntax node.</param>
+    public override void VisitBinaryExpression(BinaryExpressionSyntax node)
+    {
+        var symbolInfo = _semanticModel.GetSymbolInfo(node);
+
+        // Operator overloads resolve to IMethodSymbol with MethodKind.UserDefinedOperator
+        if (symbolInfo.Symbol is IMethodSymbol operatorSymbol)
+        {
+            var targetAssembly = operatorSymbol.ContainingAssembly;
+
+            // Check if operator belongs to a different assembly
+            if (targetAssembly != null &&
+                !SymbolEqualityComparer.Default.Equals(_sourceAssembly, targetAssembly))
+            {
+                var targetAssemblyName = targetAssembly.Name;
+
+                // Increment call count for operator overload
+                _callCounts[targetAssemblyName] = _callCounts.GetValueOrDefault(targetAssemblyName) + 1;
+            }
+        }
+
+        // Continue walking the syntax tree
+        base.VisitBinaryExpression(node);
+    }
+
+    /// <summary>
+    /// Visits cast expressions to count implicit/explicit conversion operator calls across assembly boundaries.
+    /// Casts like (TargetType)value can invoke user-defined conversion operators.
+    /// </summary>
+    /// <param name="node">The cast expression syntax node.</param>
+    public override void VisitCastExpression(CastExpressionSyntax node)
+    {
+        var symbolInfo = _semanticModel.GetSymbolInfo(node);
+
+        // Conversion operators resolve to IMethodSymbol with MethodKind.Conversion
+        if (symbolInfo.Symbol is IMethodSymbol conversionSymbol)
+        {
+            var targetAssembly = conversionSymbol.ContainingAssembly;
+
+            // Check if conversion operator belongs to a different assembly
+            if (targetAssembly != null &&
+                !SymbolEqualityComparer.Default.Equals(_sourceAssembly, targetAssembly))
+            {
+                var targetAssemblyName = targetAssembly.Name;
+
+                // Increment call count for conversion operator
+                _callCounts[targetAssemblyName] = _callCounts.GetValueOrDefault(targetAssemblyName) + 1;
+            }
+        }
+
+        // Continue walking the syntax tree
+        base.VisitCastExpression(node);
     }
 }

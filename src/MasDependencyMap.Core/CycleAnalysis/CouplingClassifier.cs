@@ -19,8 +19,13 @@ public static class CouplingClassifier
     /// - Medium: 6-20 calls
     /// - Strong: 21+ calls
     /// </returns>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// Thrown when methodCallCount is negative.
+    /// </exception>
     public static CouplingStrength ClassifyCouplingStrength(int methodCallCount)
     {
+        ArgumentOutOfRangeException.ThrowIfNegative(methodCallCount);
+
         return methodCallCount switch
         {
             <= WeakCouplingMaxCalls => CouplingStrength.Weak,

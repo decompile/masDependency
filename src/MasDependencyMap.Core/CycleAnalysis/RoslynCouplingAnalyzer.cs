@@ -119,6 +119,8 @@ public sealed class RoslynCouplingAnalyzer : ICouplingAnalyzer
         int annotatedEdgeCount = 0;
         foreach (var edge in graph.Edges)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+
             var key = (edge.Source.ProjectName, edge.Target.ProjectName);
 
             if (edgeCouplingScores.TryGetValue(key, out int couplingScore))

@@ -204,6 +204,26 @@ public class RoslynCouplingAnalyzerTests
         await act.Should().ThrowAsync<OperationCanceledException>();
     }
 
+    [Fact]
+    public void CouplingClassifier_NegativeInput_ThrowsArgumentOutOfRangeException()
+    {
+        // Act
+        Action act = () => CouplingClassifier.ClassifyCouplingStrength(-1);
+
+        // Assert
+        act.Should().Throw<ArgumentOutOfRangeException>();
+    }
+
+    [Fact]
+    public void CouplingClassifier_ZeroCalls_ReturnsWeak()
+    {
+        // Act
+        var result = CouplingClassifier.ClassifyCouplingStrength(0);
+
+        // Assert
+        result.Should().Be(CouplingStrength.Weak);
+    }
+
     // Helper method to create a graph with multiple edges for testing
     private static AdjacencyGraph<ProjectNode, DependencyEdge> CreateGraphWithMultipleEdges()
     {
