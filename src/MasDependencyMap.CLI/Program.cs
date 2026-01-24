@@ -140,6 +140,7 @@ public class Program
         services.TryAddSingleton<MasDependencyMap.Core.Visualization.IDotGenerator, MasDependencyMap.Core.Visualization.DotGenerator>();
         services.TryAddSingleton<ITarjanCycleDetector, TarjanCycleDetector>();
         services.TryAddSingleton<ICycleStatisticsCalculator, CycleStatisticsCalculator>();
+        services.TryAddSingleton<ICouplingAnalyzer, RoslynCouplingAnalyzer>();
 
         // Register FilterConfiguration with validation
         services
@@ -364,6 +365,25 @@ public class Program
                 var filteredGraph = await frameworkFilter.FilterAsync(graph, cancellationToken);
                 var removedCount = graph.EdgeCount - filteredGraph.EdgeCount;
                 ansiConsole.MarkupLine($"[green]✓[/] Filtered {removedCount} framework dependencies");
+
+                // Detect circular dependencies
+                var cycleDetector = serviceProvider.GetRequiredService<ITarjanCycleDetector>();
+                ansiConsole.MarkupLine("[cyan]Detecting circular dependencies...[/]");
+                var cycles = await cycleDetector.DetectCyclesAsync(filteredGraph, cancellationToken);
+
+                if (cycles.Count > 0)
+                {
+                    var statsCalculator = serviceProvider.GetRequiredService<ICycleStatisticsCalculator>();
+                    var statistics = await statsCalculator.CalculateAsync(cycles, filteredGraph.VertexCount, cancellationToken);
+
+                    ansiConsole.MarkupLine($"[yellow]⚠ Found {statistics.TotalCycles} circular dependency chains[/]");
+                    ansiConsole.MarkupLine($"[dim]  Projects in cycles:[/] {statistics.TotalProjectsInCycles} ({statistics.ParticipationRate:F1}%)");
+                    ansiConsole.MarkupLine($"[dim]  Largest cycle:[/] {statistics.LargestCycleSize} projects");
+                }
+                else
+                {
+                    ansiConsole.MarkupLine("[green]✓[/] No circular dependencies detected");
+                }
 
                 // Generate DOT file
                 var dotFilePath = await dotGenerator.GenerateAsync(filteredGraph, outputDir, solutionName, cancellationToken);

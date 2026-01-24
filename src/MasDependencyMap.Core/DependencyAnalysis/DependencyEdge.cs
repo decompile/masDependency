@@ -1,9 +1,10 @@
 namespace MasDependencyMap.Core.DependencyAnalysis;
 
+using MasDependencyMap.Core.CycleAnalysis;
 using QuikGraph;
 
 /// <summary>
-/// Represents a dependency edge in the dependency graph.
+/// Represents a dependency edge in the dependency graph with coupling strength metrics.
 /// Implements QuikGraph's IEdge interface for graph algorithm compatibility.
 /// </summary>
 public class DependencyEdge : IEdge<ProjectNode>
@@ -24,6 +25,20 @@ public class DependencyEdge : IEdge<ProjectNode>
     public required DependencyType DependencyType { get; init; }
 
     /// <summary>
+    /// Gets or sets the coupling score (number of method calls from Source to Target).
+    /// Defaults to 1 (reference count) if semantic analysis is unavailable.
+    /// Value is mutable to allow annotation after graph construction.
+    /// </summary>
+    public int CouplingScore { get; set; } = 1;
+
+    /// <summary>
+    /// Gets or sets the classification of coupling strength based on method call count.
+    /// Weak (1-5), Medium (6-20), Strong (21+).
+    /// Defaults to Weak. Value is mutable to allow annotation after graph construction.
+    /// </summary>
+    public CouplingStrength CouplingStrength { get; set; } = CouplingStrength.Weak;
+
+    /// <summary>
     /// Gets a value indicating whether this is a project reference dependency.
     /// </summary>
     public bool IsProjectReference => DependencyType == DependencyType.ProjectReference;
@@ -40,9 +55,9 @@ public class DependencyEdge : IEdge<ProjectNode>
     /// <summary>
     /// Returns a string representation of this edge for debugging.
     /// </summary>
-    /// <returns>A string showing the source, target, and dependency type.</returns>
+    /// <returns>A string showing the source, target, dependency type, and coupling information.</returns>
     public override string ToString()
     {
-        return $"{Source.ProjectName} -> {Target.ProjectName} ({DependencyType})";
+        return $"{Source.ProjectName} -> {Target.ProjectName} ({DependencyType}, {CouplingScore} calls, {CouplingStrength})";
     }
 }

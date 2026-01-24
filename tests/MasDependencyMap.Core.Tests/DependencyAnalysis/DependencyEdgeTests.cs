@@ -161,7 +161,7 @@ public class DependencyEdgeTests
         var result = edge.ToString();
 
         // Assert
-        result.Should().Be("SourceProject -> TargetProject (ProjectReference)");
+        result.Should().Be("SourceProject -> TargetProject (ProjectReference, 1 calls, Weak)");
     }
 
     [Fact]
