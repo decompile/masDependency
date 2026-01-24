@@ -139,6 +139,7 @@ public class Program
         services.TryAddSingleton<IFrameworkFilter, FrameworkFilter>();
         services.TryAddSingleton<MasDependencyMap.Core.Visualization.IDotGenerator, MasDependencyMap.Core.Visualization.DotGenerator>();
         services.TryAddSingleton<ITarjanCycleDetector, TarjanCycleDetector>();
+        services.TryAddSingleton<ICycleStatisticsCalculator, CycleStatisticsCalculator>();
 
         // Register FilterConfiguration with validation
         services

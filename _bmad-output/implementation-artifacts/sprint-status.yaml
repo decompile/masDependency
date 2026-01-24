@@ -66,7 +66,7 @@ development_status:
 
   epic-3: in-progress
   3-1-implement-tarjans-scc-algorithm-for-cycle-detection: done
-  3-2-calculate-cycle-statistics-and-participation-rates: backlog
+  3-2-calculate-cycle-statistics-and-participation-rates: review
   3-3-implement-coupling-strength-analysis-via-method-call-counting: backlog
   3-4-identify-weakest-coupling-edges-within-cycles: backlog
   3-5-generate-ranked-cycle-breaking-recommendations: backlog

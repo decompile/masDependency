@@ -12,10 +12,14 @@ using MasDependencyMap.Core.DependencyAnalysis;
 public class TarjanCycleDetector : ITarjanCycleDetector
 {
     private readonly ILogger<TarjanCycleDetector> _logger;
+    private readonly ICycleStatisticsCalculator _statisticsCalculator;
 
-    public TarjanCycleDetector(ILogger<TarjanCycleDetector> logger)
+    public TarjanCycleDetector(
+        ILogger<TarjanCycleDetector> logger,
+        ICycleStatisticsCalculator statisticsCalculator)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _statisticsCalculator = statisticsCalculator ?? throw new ArgumentNullException(nameof(statisticsCalculator));
     }
 
     /// <inheritdoc />
@@ -70,22 +74,12 @@ public class TarjanCycleDetector : ITarjanCycleDetector
                 return cycleList;
             }, cancellationToken).ConfigureAwait(false);
 
-            // Log results
-            if (cycles.Count > 0)
-            {
-                var stats = CalculateStatistics(cycles, graph.VertexCount);
-
-                _logger.LogInformation(
-                    "Found {CycleCount} circular dependency chains, {ProjectsInCycles} projects ({ParticipationRate:F1}%) involved in cycles, largest cycle: {LargestCycleSize} projects",
-                    stats.totalCycles,
-                    stats.projectsInCycles,
-                    stats.participationRate,
-                    stats.largestCycle);
-            }
-            else
-            {
-                _logger.LogInformation("No circular dependencies detected");
-            }
+            // Calculate and log statistics using dedicated service
+            // Statistics calculator handles empty cycle list and logging
+            var statistics = await _statisticsCalculator.CalculateAsync(
+                cycles,
+                graph.VertexCount,
+                cancellationToken).ConfigureAwait(false);
 
             return cycles;
         }
@@ -101,24 +95,4 @@ public class TarjanCycleDetector : ITarjanCycleDetector
         }
     }
 
-    private (int totalCycles, int largestCycle, int projectsInCycles, double participationRate) CalculateStatistics(
-        IReadOnlyList<CycleInfo> cycles,
-        int totalProjectCount)
-    {
-        if (cycles.Count == 0)
-            return (0, 0, 0, 0.0);
-
-        int totalCycles = cycles.Count;
-        int largestCycle = cycles.Max(c => c.CycleSize);
-
-        // Count distinct projects across all cycles (project may appear in multiple cycles)
-        int projectsInCycles = cycles
-            .SelectMany(c => c.Projects)
-            .Distinct()
-            .Count();
-
-        double participationRate = (projectsInCycles / (double)totalProjectCount) * 100.0;
-
-        return (totalCycles, largestCycle, projectsInCycles, participationRate);
-    }
 }

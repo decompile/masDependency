@@ -10,12 +10,16 @@ using MasDependencyMap.Core.DependencyAnalysis;
 public class TarjanCycleDetectorTests
 {
     private readonly ILogger<TarjanCycleDetector> _logger;
+    private readonly ILogger<CycleStatisticsCalculator> _statsLogger;
+    private readonly ICycleStatisticsCalculator _statisticsCalculator;
     private readonly TarjanCycleDetector _detector;
 
     public TarjanCycleDetectorTests()
     {
         _logger = NullLogger<TarjanCycleDetector>.Instance;
-        _detector = new TarjanCycleDetector(_logger);
+        _statsLogger = NullLogger<CycleStatisticsCalculator>.Instance;
+        _statisticsCalculator = new CycleStatisticsCalculator(_statsLogger);
+        _detector = new TarjanCycleDetector(_logger, _statisticsCalculator);
     }
 
     [Fact]
