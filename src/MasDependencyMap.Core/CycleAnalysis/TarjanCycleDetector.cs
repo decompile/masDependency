@@ -19,7 +19,7 @@ public class TarjanCycleDetector : ITarjanCycleDetector
     }
 
     /// <inheritdoc />
-    public Task<IReadOnlyList<CycleInfo>> DetectCyclesAsync(
+    public async Task<IReadOnlyList<CycleInfo>> DetectCyclesAsync(
         DependencyGraph graph,
         CancellationToken cancellationToken = default)
     {
@@ -28,7 +28,7 @@ public class TarjanCycleDetector : ITarjanCycleDetector
         if (graph.VertexCount == 0)
         {
             _logger.LogInformation("Empty graph provided, no cycles to detect");
-            return Task.FromResult<IReadOnlyList<CycleInfo>>(Array.Empty<CycleInfo>());
+            return Array.Empty<CycleInfo>();
         }
 
         try
@@ -37,26 +37,38 @@ public class TarjanCycleDetector : ITarjanCycleDetector
                 "Detecting circular dependencies in {ProjectCount} projects",
                 graph.VertexCount);
 
+            // Check cancellation before expensive operation
+            cancellationToken.ThrowIfCancellationRequested();
+
             // Use QuikGraph's built-in Tarjan algorithm via extension method
-            var components = new Dictionary<ProjectNode, int>();
-            var underlyingGraph = graph.GetUnderlyingGraph();
-            var componentCount = underlyingGraph.StronglyConnectedComponents(components);
-
-            var cycles = new List<CycleInfo>();
-            int cycleId = 1;
-
-            // Group by component index to get each SCC
-            var componentGroups = components
-                .GroupBy(kvp => kvp.Value)
-                .Select(g => g.Select(kvp => kvp.Key).ToList())
-                .Where(component => component.Count > 1) // Filter to multi-node SCCs only
-                .ToList();
-
-            // Create CycleInfo for each cycle
-            foreach (var component in componentGroups)
+            // Run in Task.Run to enable cancellation support for CPU-bound work
+            var cycles = await Task.Run(() =>
             {
-                cycles.Add(new CycleInfo(cycleId++, component));
-            }
+                var components = new Dictionary<ProjectNode, int>();
+                var underlyingGraph = graph.GetUnderlyingGraph();
+                var componentCount = underlyingGraph.StronglyConnectedComponents(components);
+
+                var cycleList = new List<CycleInfo>();
+                int cycleId = 1;
+
+                // Group by component index to get each SCC
+                var componentGroups = components
+                    .GroupBy(kvp => kvp.Value)
+                    .Select(g => g.Select(kvp => kvp.Key).ToList())
+                    .Where(component => component.Count > 1) // Filter to multi-node SCCs only
+                    .ToList();
+
+                // Check cancellation before processing results
+                cancellationToken.ThrowIfCancellationRequested();
+
+                // Create CycleInfo for each cycle
+                foreach (var component in componentGroups)
+                {
+                    cycleList.Add(new CycleInfo(cycleId++, component));
+                }
+
+                return cycleList;
+            }, cancellationToken).ConfigureAwait(false);
 
             // Log results
             if (cycles.Count > 0)
@@ -64,17 +76,23 @@ public class TarjanCycleDetector : ITarjanCycleDetector
                 var stats = CalculateStatistics(cycles, graph.VertexCount);
 
                 _logger.LogInformation(
-                    "Found {CycleCount} circular dependency chains, {ProjectsInCycles} projects ({ParticipationRate:F1}%) involved in cycles",
+                    "Found {CycleCount} circular dependency chains, {ProjectsInCycles} projects ({ParticipationRate:F1}%) involved in cycles, largest cycle: {LargestCycleSize} projects",
                     stats.totalCycles,
                     stats.projectsInCycles,
-                    stats.participationRate);
+                    stats.participationRate,
+                    stats.largestCycle);
             }
             else
             {
                 _logger.LogInformation("No circular dependencies detected");
             }
 
-            return Task.FromResult<IReadOnlyList<CycleInfo>>(cycles);
+            return cycles;
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogWarning("Cycle detection cancelled");
+            throw;
         }
         catch (Exception ex)
         {
