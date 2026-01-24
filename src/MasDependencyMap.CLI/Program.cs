@@ -399,7 +399,8 @@ public class Program
                 }
 
                 // Generate DOT file with cycle and recommendation highlighting
-                var dotFilePath = await dotGenerator.GenerateAsync(filteredGraph, outputDir, solutionName, cycles, recommendations, cancellationToken);
+                // Using default maxBreakPoints (10) to avoid visual clutter
+                var dotFilePath = await dotGenerator.GenerateAsync(filteredGraph, outputDir, solutionName, cycles, recommendations, maxBreakPoints: 10, cancellationToken);
                 ansiConsole.MarkupLine($"[green]✓[/] Generated DOT file: {Path.GetFileName(dotFilePath)}");
 
                 // Render to image formats if Graphviz is available

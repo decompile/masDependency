@@ -22,8 +22,10 @@ public interface IDotGenerator
     /// <param name="cycles">Optional list of detected circular dependencies for highlighting.
     /// When provided, edges within cycles are rendered in RED. When null or empty, no cycle highlighting is applied.</param>
     /// <param name="recommendations">Optional list of cycle-breaking recommendations for highlighting.
-    /// When provided, top 10 suggested break point edges are rendered in YELLOW.
+    /// When provided, top N suggested break point edges are rendered in YELLOW (where N = maxBreakPoints).
     /// YELLOW takes priority over RED if edge is both cyclic and a break suggestion.</param>
+    /// <param name="maxBreakPoints">Maximum number of break point edges to highlight in YELLOW (default: 10).
+    /// Limits visual clutter by showing only the highest priority recommendations.</param>
     /// <param name="cancellationToken">Cancellation token for async operation.</param>
     /// <returns>Absolute path to the generated .dot file.</returns>
     /// <exception cref="ArgumentNullException">When graph, outputDirectory, or solutionName is null.</exception>
@@ -35,5 +37,6 @@ public interface IDotGenerator
         string solutionName,
         IReadOnlyList<CycleInfo>? cycles = null,
         IReadOnlyList<CycleBreakingSuggestion>? recommendations = null,
+        int maxBreakPoints = 10,
         CancellationToken cancellationToken = default);
 }

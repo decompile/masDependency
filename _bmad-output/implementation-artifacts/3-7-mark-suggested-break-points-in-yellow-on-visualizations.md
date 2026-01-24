@@ -1,6 +1,6 @@
 # Story 3.7: Mark Suggested Break Points in YELLOW on Visualizations
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -388,13 +388,15 @@ From latest Graphviz documentation (2026):
 Story 3.5 created CycleBreakingSuggestion model. Story 3.7 consumes it:
 
 ```csharp
-public class CycleBreakingSuggestion
+public sealed record CycleBreakingSuggestion : IComparable<CycleBreakingSuggestion>
 {
-    public string SourceProject { get; set; }  // Project dependency is from
-    public string TargetProject { get; set; }  // Project dependency points to
-    public int CouplingScore { get; set; }     // Number of method calls (lower = weaker = better to break)
-    public string Rationale { get; set; }      // Human-readable reason for suggestion
-    public int CycleId { get; set; }           // Which cycle this edge is part of
+    public int CycleId { get; init; }                    // Which cycle this edge is part of
+    public ProjectNode SourceProject { get; init; }      // Project dependency is from (NOT string!)
+    public ProjectNode TargetProject { get; init; }      // Project dependency points to (NOT string!)
+    public int CouplingScore { get; init; }              // Number of method calls (lower = weaker = better to break)
+    public int CycleSize { get; init; }                  // Size of the cycle
+    public string Rationale { get; init; }               // Human-readable reason for suggestion
+    public int Rank { get; init; }                       // Priority ranking (1 = highest priority)
 }
 ```
 
@@ -1129,11 +1131,35 @@ Claude Sonnet 4.5 (claude-sonnet-4-5-20250929)
 
 None
 
+### Code Review - Fixes Applied
+
+**Review Date:** 2026-01-24
+**Reviewer:** Claude Sonnet 4.5 (Adversarial Code Review Mode)
+**Issues Found:** 10 (2 High, 5 Medium, 3 Low)
+**Issues Fixed:** 7 (All High and Medium severity)
+
+**HIGH SEVERITY FIXES:**
+1. **Removed redundant sorting logic** - BuildBreakPointEdgeSet was re-sorting pre-sorted recommendations. Removed `.OrderBy()` call and added comment explaining recommendations are already sorted by IRecommendationGenerator.
+2. **Fixed sorting to respect IComparable implementation** - By removing OrderBy, now correctly uses the 3-tier sorting (coupling score → cycle size → project name) from CycleBreakingSuggestion.CompareTo().
+
+**MEDIUM SEVERITY FIXES:**
+3. **Fixed legend wording confusion** - Changed legend from "Top {topN}" (actual colored edge count) to "Top {maxBreakPoints}" (requested limit) to avoid user confusion when some recommendations don't have matching edges in the graph.
+4. **Made maxBreakPoints configurable** - Added `int maxBreakPoints = 10` parameter to `IDotGenerator.GenerateAsync()` allowing callers to request different limits (default remains 10 per AC requirement).
+5. **Fixed dev notes documentation mismatch** - Corrected CycleBreakingSuggestion model documentation showing ProjectNode properties instead of string properties.
+6. **Added case-insensitive edge comparer** - Created `CaseInsensitiveEdgeComparer` class and used it in both `BuildBreakPointEdgeSet()` and `BuildCyclicEdgeSet()` to prevent edge lookup failures due to project name casing differences.
+7. **Fixed StringBuilder capacity underestimate** - Added 200 chars for dependency type legend size to capacity estimate to avoid mid-operation resizing.
+
+**LOW SEVERITY (NOT FIXED - Optional improvements):**
+8. Missing test for triple-condition edge (cross-solution + cyclic + break point) - Test coverage gap
+9. CLI defensive null check missing on dotFilePath - Minor defensive coding improvement
+10. Missing ConfigureAwait documentation comment - Code documentation enhancement
+
 ### Completion Notes List
 
+**Initial Implementation:**
 - Extended IDotGenerator interface with optional `recommendations` parameter for backward compatibility
 - Added BuildBreakPointEdgeSet helper method for O(1) edge lookup using HashSet<(string, string)>
-- Implemented top 10 limit to avoid visual clutter (OrderBy coupling score, Take 10)
+- Implemented top 10 limit to avoid visual clutter
 - Modified BuildDotContent to accept and use recommendation information
 - Implemented edge color priority: Break Points (YELLOW) > Cycles (RED) > Cross-solution (BLUE) > Default (BLACK)
 - YELLOW overrides RED for edges that are both cyclic and recommended (highest priority)
@@ -1147,6 +1173,18 @@ None
 - All 261 tests pass
 - All acceptance criteria satisfied
 - Backward compatible: Story 2-8 and Story 3-6 callers work without changes
+
+**Code Review Fixes (2026-01-24):**
+- Removed redundant `.OrderBy()` in BuildBreakPointEdgeSet - recommendations are pre-sorted by IRecommendationGenerator
+- Fixed sorting to respect CycleBreakingSuggestion.CompareTo() 3-tier logic (coupling → cycle size → name)
+- Added `int maxBreakPoints = 10` parameter to GenerateAsync for configurability
+- Fixed legend to show requested limit "Top {maxBreakPoints}" instead of actual colored count
+- Added CaseInsensitiveEdgeComparer class to prevent edge lookup failures from casing differences
+- Applied case-insensitive comparer to both BuildBreakPointEdgeSet and BuildCyclicEdgeSet
+- Fixed StringBuilder capacity estimate to include dependency type legend size (+200 chars)
+- Corrected dev notes documentation showing ProjectNode properties (not string) in CycleBreakingSuggestion
+- Updated test to use named parameter for cancellationToken after adding maxBreakPoints parameter
+- All 261 tests still pass after fixes
 
 ### File List
 

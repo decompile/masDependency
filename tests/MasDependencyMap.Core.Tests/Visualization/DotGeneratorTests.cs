@@ -482,7 +482,8 @@ public class DotGeneratorTests
                 "Test",
                 cycles: null,
                 recommendations: null,
-                cts.Token);
+                maxBreakPoints: 10,
+                cancellationToken: cts.Token);
 
             // Assert
             await act.Should().ThrowAsync<OperationCanceledException>();

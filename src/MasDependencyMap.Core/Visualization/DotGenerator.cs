@@ -26,6 +26,7 @@ public class DotGenerator : IDotGenerator
         string solutionName,
         IReadOnlyList<CycleInfo>? cycles = null,
         IReadOnlyList<CycleBreakingSuggestion>? recommendations = null,
+        int maxBreakPoints = 10,
         CancellationToken cancellationToken = default)
     {
         // Validation
@@ -47,7 +48,7 @@ public class DotGenerator : IDotGenerator
         }
 
         // Build DOT content
-        var dotContent = BuildDotContent(graph, cycles, recommendations, out bool isMultiSolution);
+        var dotContent = BuildDotContent(graph, cycles, recommendations, maxBreakPoints, out bool isMultiSolution);
 
         // Prepare output path with multi-solution naming support
         var sanitizedSolutionName = SanitizeFileName(solutionName);
@@ -80,7 +81,8 @@ public class DotGenerator : IDotGenerator
         IReadOnlyList<CycleInfo> cycles,
         DependencyGraph graph)
     {
-        var cyclicEdges = new HashSet<(string, string)>();
+        // Use case-insensitive comparer for consistent edge matching
+        var cyclicEdges = new HashSet<(string, string)>(new CaseInsensitiveEdgeComparer());
 
         // Pre-build all cycle project sets for O(1) lookup - more efficient than iterating edges per cycle
         var cycleProjectSets = cycles
@@ -115,11 +117,13 @@ public class DotGenerator : IDotGenerator
         IReadOnlyList<CycleBreakingSuggestion> recommendations,
         int maxSuggestions = 10)
     {
-        var breakPointEdges = new HashSet<(string, string)>();
+        // Use case-insensitive comparer for consistent edge matching
+        var breakPointEdges = new HashSet<(string, string)>(new CaseInsensitiveEdgeComparer());
 
-        // Take top N recommendations to avoid visual clutter
+        // Take top N recommendations - already pre-sorted by IRecommendationGenerator
+        // Sorting: (1) coupling score ascending, (2) cycle size descending, (3) project name alphabetical
+        // No need to re-sort here as CycleBreakingSuggestion implements IComparable correctly
         var topRecommendations = recommendations
-            .OrderBy(r => r.CouplingScore)  // Lowest coupling score first (weakest links)
             .Take(maxSuggestions)
             .ToList();
 
@@ -150,7 +154,7 @@ public class DotGenerator : IDotGenerator
         return breakPointEdges;
     }
 
-    private string BuildDotContent(DependencyGraph graph, IReadOnlyList<CycleInfo>? cycles, IReadOnlyList<CycleBreakingSuggestion>? recommendations, out bool isMultiSolution)
+    private string BuildDotContent(DependencyGraph graph, IReadOnlyList<CycleInfo>? cycles, IReadOnlyList<CycleBreakingSuggestion>? recommendations, int maxBreakPoints, out bool isMultiSolution)
     {
         // Build cyclic edge set for O(1) lookup during edge generation
         var cyclicEdges = cycles != null && cycles.Count > 0
@@ -159,7 +163,7 @@ public class DotGenerator : IDotGenerator
 
         // Build break point edge set for O(1) lookup during edge generation
         var breakPointEdges = recommendations != null && recommendations.Count > 0
-            ? BuildBreakPointEdgeSet(recommendations)
+            ? BuildBreakPointEdgeSet(recommendations, maxBreakPoints)
             : new HashSet<(string, string)>();
 
         // Detect multi-solution graphs
@@ -179,8 +183,10 @@ public class DotGenerator : IDotGenerator
             solutionColorMap[uniqueSolutions[i]] = SolutionNodeColors[i % SolutionNodeColors.Length];
         }
 
-        // Estimate capacity: ~80 chars per node + ~60 chars per edge + legend + 300 for header/footer
-        var estimatedCapacity = (graph.VertexCount * 80) + (graph.EdgeCount * 60) + (uniqueSolutions.Count * 100) + 300;
+        // Estimate capacity: ~80 chars per node + ~60 chars per edge + legends + header/footer
+        // Solution legend: ~100 chars per solution
+        // Dependency type legend: ~200 chars (break points, cycles, cross-solution, default)
+        var estimatedCapacity = (graph.VertexCount * 80) + (graph.EdgeCount * 60) + (uniqueSolutions.Count * 100) + 200 + 300;
         var builder = new StringBuilder(estimatedCapacity);
 
         // Header
@@ -301,8 +307,8 @@ public class DotGenerator : IDotGenerator
             // Break points (highest priority, show first)
             if (breakPointEdgeCount > 0)
             {
-                var topN = Math.Min(breakPointEdgeCount, 10);
-                builder.AppendLine($"        legend_breakpoint [label=\"Yellow: Suggested Break Points (Top {topN})\", color=\"yellow\", style=\"bold\", shape=\"box\"];");
+                // Show requested limit (e.g., "Top 10") rather than actual count to avoid confusion
+                builder.AppendLine($"        legend_breakpoint [label=\"Yellow: Suggested Break Points (Top {maxBreakPoints})\", color=\"yellow\", style=\"bold\", shape=\"box\"];");
             }
 
             // Cycles (show when present)
@@ -351,5 +357,25 @@ public class DotGenerator : IDotGenerator
 
         // Handle edge case where all characters were invalid
         return string.IsNullOrWhiteSpace(sanitized) ? "output" : sanitized;
+    }
+
+    /// <summary>
+    /// Case-insensitive equality comparer for edge tuples (source, target).
+    /// Ensures consistent edge matching regardless of project name casing.
+    /// </summary>
+    private sealed class CaseInsensitiveEdgeComparer : IEqualityComparer<(string, string)>
+    {
+        public bool Equals((string, string) x, (string, string) y)
+        {
+            return string.Equals(x.Item1, y.Item1, StringComparison.OrdinalIgnoreCase) &&
+                   string.Equals(x.Item2, y.Item2, StringComparison.OrdinalIgnoreCase);
+        }
+
+        public int GetHashCode((string, string) obj)
+        {
+            return HashCode.Combine(
+                obj.Item1?.ToLowerInvariant() ?? string.Empty,
+                obj.Item2?.ToLowerInvariant() ?? string.Empty);
+        }
     }
 }
