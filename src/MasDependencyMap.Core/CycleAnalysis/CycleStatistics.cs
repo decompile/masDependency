@@ -48,6 +48,20 @@ public sealed record CycleStatistics
         int totalProjectsInCycles,
         int totalProjectsAnalyzed)
     {
+        // Validate all parameters are non-negative
+        ArgumentOutOfRangeException.ThrowIfNegative(totalCycles);
+        ArgumentOutOfRangeException.ThrowIfNegative(largestCycleSize);
+        ArgumentOutOfRangeException.ThrowIfNegative(totalProjectsInCycles);
+        ArgumentOutOfRangeException.ThrowIfNegative(totalProjectsAnalyzed);
+
+        // Validate logical invariant: projects in cycles cannot exceed total projects
+        if (totalProjectsInCycles > totalProjectsAnalyzed)
+        {
+            throw new ArgumentException(
+                $"Projects in cycles ({totalProjectsInCycles}) cannot exceed total projects analyzed ({totalProjectsAnalyzed})",
+                nameof(totalProjectsInCycles));
+        }
+
         TotalCycles = totalCycles;
         LargestCycleSize = largestCycleSize;
         TotalProjectsInCycles = totalProjectsInCycles;

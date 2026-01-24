@@ -40,6 +40,10 @@ public class CycleStatisticsCalculator : ICycleStatisticsCalculator
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(cycles);
+        ArgumentOutOfRangeException.ThrowIfNegative(totalProjectsAnalyzed);
+
+        // Check cancellation before starting work
+        cancellationToken.ThrowIfCancellationRequested();
 
         // Edge case: no cycles detected
         if (cycles.Count == 0)
@@ -55,6 +59,9 @@ public class CycleStatisticsCalculator : ICycleStatisticsCalculator
         int totalCycles = cycles.Count;
         int largestCycleSize = cycles.Max(c => c.CycleSize);
 
+        // Check cancellation before expensive distinct operation
+        cancellationToken.ThrowIfCancellationRequested();
+
         // CRITICAL: Use Distinct() to count each project only once
         // Projects can appear in multiple cycles (overlapping SCCs)
         int totalProjectsInCycles = cycles
@@ -69,7 +76,7 @@ public class CycleStatisticsCalculator : ICycleStatisticsCalculator
             totalProjectsAnalyzed);
 
         _logger.LogInformation(
-            "Cycle Statistics: {TotalCycles} chains, {ProjectsInCycles} projects ({ParticipationRate:F1}%), Largest: {LargestCycle}",
+            "Circular Dependency Chains: {TotalCycles}, Projects in Cycles: {ProjectsInCycles} ({ParticipationRate:F1}%), Largest Cycle Size: {LargestCycle} projects",
             statistics.TotalCycles,
             statistics.TotalProjectsInCycles,
             statistics.ParticipationRate,

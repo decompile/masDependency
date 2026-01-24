@@ -186,6 +186,98 @@ public class CycleStatisticsCalculatorTests
         statistics.LargestCycleSize.Should().Be(7);
     }
 
+    [Fact]
+    public async Task CalculateAsync_NegativeTotalProjects_ThrowsArgumentOutOfRangeException()
+    {
+        // Arrange
+        var cycles = new List<CycleInfo>
+        {
+            CreateCycle(1, "A", "B")
+        };
+        int totalProjects = -10;
+
+        // Act
+        Func<Task> act = async () => await _calculator.CalculateAsync(cycles, totalProjects);
+
+        // Assert
+        await act.Should().ThrowAsync<ArgumentOutOfRangeException>()
+            .WithParameterName("totalProjectsAnalyzed");
+    }
+
+    [Fact]
+    public async Task CalculateAsync_CancellationRequested_ThrowsOperationCanceledException()
+    {
+        // Arrange
+        var cycles = new List<CycleInfo>
+        {
+            CreateCycle(1, "A", "B", "C")
+        };
+        var cts = new CancellationTokenSource();
+        cts.Cancel(); // Cancel immediately
+
+        // Act
+        Func<Task> act = async () => await _calculator.CalculateAsync(cycles, 10, cts.Token);
+
+        // Assert
+        await act.Should().ThrowAsync<OperationCanceledException>();
+    }
+
+    [Fact]
+    public void CycleStatistics_NegativeTotalCycles_ThrowsArgumentOutOfRangeException()
+    {
+        // Act
+        Action act = () => new CycleStatistics(-1, 5, 3, 10);
+
+        // Assert
+        act.Should().Throw<ArgumentOutOfRangeException>()
+            .WithParameterName("totalCycles");
+    }
+
+    [Fact]
+    public void CycleStatistics_NegativeLargestCycleSize_ThrowsArgumentOutOfRangeException()
+    {
+        // Act
+        Action act = () => new CycleStatistics(2, -5, 3, 10);
+
+        // Assert
+        act.Should().Throw<ArgumentOutOfRangeException>()
+            .WithParameterName("largestCycleSize");
+    }
+
+    [Fact]
+    public void CycleStatistics_NegativeTotalProjectsInCycles_ThrowsArgumentOutOfRangeException()
+    {
+        // Act
+        Action act = () => new CycleStatistics(2, 5, -3, 10);
+
+        // Assert
+        act.Should().Throw<ArgumentOutOfRangeException>()
+            .WithParameterName("totalProjectsInCycles");
+    }
+
+    [Fact]
+    public void CycleStatistics_NegativeTotalProjectsAnalyzed_ThrowsArgumentOutOfRangeException()
+    {
+        // Act
+        Action act = () => new CycleStatistics(2, 5, 3, -10);
+
+        // Assert
+        act.Should().Throw<ArgumentOutOfRangeException>()
+            .WithParameterName("totalProjectsAnalyzed");
+    }
+
+    [Fact]
+    public void CycleStatistics_ProjectsInCyclesExceedsTotalProjects_ThrowsArgumentException()
+    {
+        // Act
+        Action act = () => new CycleStatistics(2, 5, 15, 10); // 15 in cycles but only 10 total!
+
+        // Assert
+        act.Should().Throw<ArgumentException>()
+            .WithParameterName("totalProjectsInCycles")
+            .WithMessage("*cannot exceed total projects*");
+    }
+
     // Helper method to create test CycleInfo objects
     private CycleInfo CreateCycle(int cycleId, params string[] projectNames)
     {
