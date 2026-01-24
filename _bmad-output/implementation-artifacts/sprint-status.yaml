@@ -68,7 +68,7 @@ development_status:
   3-1-implement-tarjans-scc-algorithm-for-cycle-detection: done
   3-2-calculate-cycle-statistics-and-participation-rates: done
   3-3-implement-coupling-strength-analysis-via-method-call-counting: done
-  3-4-identify-weakest-coupling-edges-within-cycles: backlog
+  3-4-identify-weakest-coupling-edges-within-cycles: done
   3-5-generate-ranked-cycle-breaking-recommendations: backlog
   3-6-enhance-dot-visualization-with-cycle-highlighting: backlog
   3-7-mark-suggested-break-points-in-yellow-on-visualizations: backlog

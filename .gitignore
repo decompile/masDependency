@@ -104,3 +104,7 @@ temp/
 
 # Custom ignore folder
 .ignore/
+
+# Tool output artifacts
+output/
+samples/sample-output/

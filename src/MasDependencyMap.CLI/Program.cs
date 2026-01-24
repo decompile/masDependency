@@ -141,6 +141,7 @@ public class Program
         services.TryAddSingleton<ITarjanCycleDetector, TarjanCycleDetector>();
         services.TryAddSingleton<ICycleStatisticsCalculator, CycleStatisticsCalculator>();
         services.TryAddSingleton<ICouplingAnalyzer, RoslynCouplingAnalyzer>();
+        services.TryAddSingleton<IWeakEdgeIdentifier, WeakEdgeIdentifier>();
 
         // Register FilterConfiguration with validation
         services
