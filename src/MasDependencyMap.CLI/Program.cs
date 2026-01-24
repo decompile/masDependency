@@ -387,8 +387,8 @@ public class Program
                     ansiConsole.MarkupLine("[green]✓[/] No circular dependencies detected");
                 }
 
-                // Generate DOT file
-                var dotFilePath = await dotGenerator.GenerateAsync(filteredGraph, outputDir, solutionName, cancellationToken);
+                // Generate DOT file with cycle highlighting
+                var dotFilePath = await dotGenerator.GenerateAsync(filteredGraph, outputDir, solutionName, cycles, cancellationToken);
                 ansiConsole.MarkupLine($"[green]✓[/] Generated DOT file: {Path.GetFileName(dotFilePath)}");
 
                 // Render to image formats if Graphviz is available

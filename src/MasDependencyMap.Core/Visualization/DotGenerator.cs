@@ -2,6 +2,7 @@ namespace MasDependencyMap.Core.Visualization;
 
 using System.Text;
 using Microsoft.Extensions.Logging;
+using MasDependencyMap.Core.CycleAnalysis;
 using MasDependencyMap.Core.DependencyAnalysis;
 
 /// <summary>
@@ -14,9 +15,6 @@ public class DotGenerator : IDotGenerator
     // Node fill colors for solutions (lighter shades for better readability)
     private static readonly string[] SolutionNodeColors = { "lightblue", "lightgreen", "lightyellow", "lightpink", "lightcyan", "lavender", "lightsalmon", "lightgray" };
 
-    // Edge colors for cross-solution dependencies (bold colors for visibility)
-    private static readonly string[] CrossSolutionEdgeColors = { "red", "blue", "green", "purple", "orange", "brown" };
-
     public DotGenerator(ILogger<DotGenerator> logger)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -26,6 +24,7 @@ public class DotGenerator : IDotGenerator
         DependencyGraph graph,
         string outputDirectory,
         string solutionName,
+        IReadOnlyList<CycleInfo>? cycles = null,
         CancellationToken cancellationToken = default)
     {
         // Validation
@@ -47,7 +46,7 @@ public class DotGenerator : IDotGenerator
         }
 
         // Build DOT content
-        var dotContent = BuildDotContent(graph, out bool isMultiSolution);
+        var dotContent = BuildDotContent(graph, cycles, out bool isMultiSolution);
 
         // Prepare output path with multi-solution naming support
         var sanitizedSolutionName = SanitizeFileName(solutionName);
@@ -76,8 +75,48 @@ public class DotGenerator : IDotGenerator
         }
     }
 
-    private string BuildDotContent(DependencyGraph graph, out bool isMultiSolution)
+    private HashSet<(string source, string target)> BuildCyclicEdgeSet(
+        IReadOnlyList<CycleInfo> cycles,
+        DependencyGraph graph)
     {
+        var cyclicEdges = new HashSet<(string, string)>();
+
+        // Pre-build all cycle project sets for O(1) lookup - more efficient than iterating edges per cycle
+        var cycleProjectSets = cycles
+            .Select(cycle => new HashSet<string>(
+                cycle.Projects.Select(p => p.ProjectName),
+                StringComparer.OrdinalIgnoreCase))
+            .ToList();
+
+        // Iterate edges once and check against all cycles - O(E * C) with better cache locality
+        foreach (var edge in graph.Edges)
+        {
+            foreach (var projectsInCycle in cycleProjectSets)
+            {
+                if (projectsInCycle.Contains(edge.Source.ProjectName) &&
+                    projectsInCycle.Contains(edge.Target.ProjectName))
+                {
+                    cyclicEdges.Add((edge.Source.ProjectName, edge.Target.ProjectName));
+                    break; // Edge found in a cycle, no need to check other cycles
+                }
+            }
+        }
+
+        _logger.LogDebug(
+            "Identified {CyclicEdgeCount} cyclic edges across {CycleCount} cycles",
+            cyclicEdges.Count,
+            cycles.Count);
+
+        return cyclicEdges;
+    }
+
+    private string BuildDotContent(DependencyGraph graph, IReadOnlyList<CycleInfo>? cycles, out bool isMultiSolution)
+    {
+        // Build cyclic edge set for O(1) lookup during edge generation
+        var cyclicEdges = cycles != null && cycles.Count > 0
+            ? BuildCyclicEdgeSet(cycles, graph)
+            : new HashSet<(string, string)>();
+
         // Detect multi-solution graphs
         var uniqueSolutions = graph.Vertices
             .Select(v => v.SolutionName)
@@ -151,19 +190,28 @@ public class DotGenerator : IDotGenerator
 
         builder.AppendLine();
 
-        // Edges with cross-solution highlighting
+        // Edges with cycle and cross-solution highlighting
+        var cyclicEdgeCount = 0;
         var crossSolutionCount = 0;
         foreach (var edge in graph.Edges)
         {
             var sourceEscaped = EscapeDotIdentifier(edge.Source.ProjectName);
             var targetEscaped = EscapeDotIdentifier(edge.Target.ProjectName);
 
-            if (edge.IsCrossSolution)
+            // Check if edge is cyclic (highest priority)
+            if (cyclicEdges.Contains((edge.Source.ProjectName, edge.Target.ProjectName)))
             {
-                // Red color and bold style for cross-solution dependencies
                 builder.AppendLine($"    {sourceEscaped} -> {targetEscaped} [color=\"red\", style=\"bold\"];");
+                cyclicEdgeCount++;
+            }
+            // Check if edge is cross-solution (medium priority)
+            else if (edge.IsCrossSolution)
+            {
+                // Blue color and bold style for cross-solution dependencies (changed from red to avoid conflict)
+                builder.AppendLine($"    {sourceEscaped} -> {targetEscaped} [color=\"blue\", style=\"bold\"];");
                 crossSolutionCount++;
             }
+            // Default: intra-solution, non-cyclic
             else
             {
                 // Black color for intra-solution dependencies
@@ -171,9 +219,37 @@ public class DotGenerator : IDotGenerator
             }
         }
 
+        if (cyclicEdgeCount > 0)
+        {
+            _logger.LogDebug("Applied cycle highlighting: {CyclicEdgeCount} edges marked in red", cyclicEdgeCount);
+        }
+
         if (crossSolutionCount > 0)
         {
-            _logger.LogDebug("Applied cross-solution highlighting: {CrossSolutionCount} edges marked in red", crossSolutionCount);
+            _logger.LogDebug("Applied cross-solution highlighting: {CrossSolutionCount} edges marked in blue", crossSolutionCount);
+        }
+
+        // Add cycle legend when cycles are provided and detected
+        if (cycles != null && cycles.Count > 0 && cyclicEdgeCount > 0)
+        {
+            builder.AppendLine();
+            builder.AppendLine("    // Legend - Dependency Types");
+            builder.AppendLine("    subgraph cluster_cycle_legend {");
+            builder.AppendLine("        label=\"Dependency Types\";");
+            builder.AppendLine("        style=dashed;");
+            builder.AppendLine("        color=gray;");
+            builder.AppendLine();
+            builder.AppendLine("        legend_cycle [label=\"Red: Circular Dependencies\", color=\"red\", style=\"bold\", shape=\"box\"];");
+
+            if (crossSolutionCount > 0)
+            {
+                builder.AppendLine("        legend_cross [label=\"Blue: Cross-Solution\", color=\"blue\", style=\"bold\", shape=\"box\"];");
+            }
+
+            builder.AppendLine("        legend_default [label=\"Black: Normal Dependencies\", color=\"black\", shape=\"box\"];");
+            builder.AppendLine("    }");
+
+            _logger.LogDebug("Generated cycle dependency legend");
         }
 
         // Footer

@@ -1,6 +1,7 @@
 namespace MasDependencyMap.Core.Tests.Visualization;
 
 using FluentAssertions;
+using MasDependencyMap.Core.CycleAnalysis;
 using MasDependencyMap.Core.DependencyAnalysis;
 using MasDependencyMap.Core.Visualization;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -479,6 +480,7 @@ public class DotGeneratorTests
                 graph,
                 outputDir,
                 "Test",
+                cycles: null,
                 cts.Token);
 
             // Assert
@@ -563,6 +565,538 @@ public class DotGeneratorTests
                 // Ignore cleanup errors
             }
         }
+    }
+
+    // ========== NEW TESTS FOR STORY 3.6: CYCLE HIGHLIGHTING ==========
+
+    [Fact]
+    public async Task GenerateAsync_WithCycles_EdgesInCyclesAreRed()
+    {
+        // Arrange
+        var graph = CreateGraphWithCycle();
+        var cycles = new List<CycleInfo>
+        {
+            new CycleInfo(1, graph.Vertices.ToList())
+        };
+        var outputDir = Path.Combine(Path.GetTempPath(), "dot-test-" + Guid.NewGuid());
+        var solutionName = "TestSolution";
+
+        try
+        {
+            // Act
+            var dotPath = await _generator.GenerateAsync(graph, outputDir, solutionName, cycles);
+            var dotContent = await File.ReadAllTextAsync(dotPath);
+
+            // Assert - Verify that ALL edges in the cycle are colored red
+            dotContent.Should().Contain("\"ProjectA\" -> \"ProjectB\" [color=\"red\", style=\"bold\"]");
+            dotContent.Should().Contain("\"ProjectB\" -> \"ProjectC\" [color=\"red\", style=\"bold\"]");
+            dotContent.Should().Contain("\"ProjectC\" -> \"ProjectA\" [color=\"red\", style=\"bold\"]");
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(outputDir))
+                    Directory.Delete(outputDir, true);
+            }
+            catch
+            {
+                // Ignore cleanup errors
+            }
+        }
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WithCycles_EdgesNotInCyclesAreBlack()
+    {
+        // Arrange
+        var graph = CreateGraphWithCycleAndNonCyclicEdge();
+        var cycleProjects = new List<ProjectNode> { graph.Vertices.ElementAt(0), graph.Vertices.ElementAt(1) };
+        var cycles = new List<CycleInfo> { new CycleInfo(1, cycleProjects) };
+        var outputDir = Path.Combine(Path.GetTempPath(), "dot-test-" + Guid.NewGuid());
+        var solutionName = "TestSolution";
+
+        try
+        {
+            // Act
+            var dotPath = await _generator.GenerateAsync(graph, outputDir, solutionName, cycles);
+            var dotContent = await File.ReadAllTextAsync(dotPath);
+
+            // Assert
+            dotContent.Should().Contain("ProjectC\" -> \"ProjectD\" [color=\"black\"]");
+            dotContent.Should().NotContain("ProjectC\" -> \"ProjectD\" [color=\"red\"");
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(outputDir))
+                    Directory.Delete(outputDir, true);
+            }
+            catch
+            {
+                // Ignore cleanup errors
+            }
+        }
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WithMultipleCycles_AllCyclicEdgesAreRed()
+    {
+        // Arrange
+        var graph = CreateGraphWithMultipleCycles();
+        var cycle1 = new CycleInfo(1, new[] { graph.Vertices.ElementAt(0), graph.Vertices.ElementAt(1) });
+        var cycle2 = new CycleInfo(2, new[] { graph.Vertices.ElementAt(2), graph.Vertices.ElementAt(3) });
+        var cycles = new List<CycleInfo> { cycle1, cycle2 };
+        var outputDir = Path.Combine(Path.GetTempPath(), "dot-test-" + Guid.NewGuid());
+        var solutionName = "TestSolution";
+
+        try
+        {
+            // Act
+            var dotPath = await _generator.GenerateAsync(graph, outputDir, solutionName, cycles);
+            var dotContent = await File.ReadAllTextAsync(dotPath);
+
+            // Assert - All cyclic edges should be red
+            dotContent.Should().Contain("ProjectA\" -> \"ProjectB\" [color=\"red\", style=\"bold\"]");
+            dotContent.Should().Contain("ProjectB\" -> \"ProjectA\" [color=\"red\", style=\"bold\"]");
+            dotContent.Should().Contain("ProjectC\" -> \"ProjectD\" [color=\"red\", style=\"bold\"]");
+            dotContent.Should().Contain("ProjectD\" -> \"ProjectC\" [color=\"red\", style=\"bold\"]");
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(outputDir))
+                    Directory.Delete(outputDir, true);
+            }
+            catch
+            {
+                // Ignore cleanup errors
+            }
+        }
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WithCycles_LegendIncludesCircularDependencies()
+    {
+        // Arrange
+        var graph = CreateGraphWithCycle();
+        var cycles = new List<CycleInfo> { new CycleInfo(1, graph.Vertices.ToList()) };
+        var outputDir = Path.Combine(Path.GetTempPath(), "dot-test-" + Guid.NewGuid());
+        var solutionName = "TestSolution";
+
+        try
+        {
+            // Act
+            var dotPath = await _generator.GenerateAsync(graph, outputDir, solutionName, cycles);
+            var dotContent = await File.ReadAllTextAsync(dotPath);
+
+            // Assert
+            dotContent.Should().Contain("Red: Circular Dependencies");
+            dotContent.Should().Contain("subgraph cluster_cycle_legend");
+            dotContent.Should().Contain("Dependency Types");
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(outputDir))
+                    Directory.Delete(outputDir, true);
+            }
+            catch
+            {
+                // Ignore cleanup errors
+            }
+        }
+    }
+
+    [Fact]
+    public async Task GenerateAsync_NullCycles_NoRedEdges()
+    {
+        // Arrange
+        var graph = CreateGraphWithCycle();
+        var outputDir = Path.Combine(Path.GetTempPath(), "dot-test-" + Guid.NewGuid());
+        var solutionName = "TestSolution";
+
+        try
+        {
+            // Act
+            var dotPath = await _generator.GenerateAsync(graph, outputDir, solutionName, cycles: null);
+            var dotContent = await File.ReadAllTextAsync(dotPath);
+
+            // Assert - No cycle highlighting when cycles is null
+            dotContent.Should().NotContain("color=\"red\"");
+            dotContent.Should().NotContain("Circular Dependencies");
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(outputDir))
+                    Directory.Delete(outputDir, true);
+            }
+            catch
+            {
+                // Ignore cleanup errors
+            }
+        }
+    }
+
+    [Fact]
+    public async Task GenerateAsync_EmptyCycles_NoRedEdges()
+    {
+        // Arrange
+        var graph = CreateGraphWithCycle();
+        var cycles = new List<CycleInfo>(); // Empty list
+        var outputDir = Path.Combine(Path.GetTempPath(), "dot-test-" + Guid.NewGuid());
+        var solutionName = "TestSolution";
+
+        try
+        {
+            // Act
+            var dotPath = await _generator.GenerateAsync(graph, outputDir, solutionName, cycles);
+            var dotContent = await File.ReadAllTextAsync(dotPath);
+
+            // Assert
+            dotContent.Should().NotContain("color=\"red\"");
+            dotContent.Should().NotContain("Circular Dependencies");
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(outputDir))
+                    Directory.Delete(outputDir, true);
+            }
+            catch
+            {
+                // Ignore cleanup errors
+            }
+        }
+    }
+
+    [Fact]
+    public async Task GenerateAsync_CyclesAndCrossSolution_CyclesTakePriority()
+    {
+        // Arrange
+        var graph = CreateGraphWithCyclicCrossSolutionEdge();
+        var cycles = new List<CycleInfo> { new CycleInfo(1, graph.Vertices.ToList()) };
+        var outputDir = Path.Combine(Path.GetTempPath(), "dot-test-" + Guid.NewGuid());
+        var solutionName = "TestSolution";
+
+        try
+        {
+            // Act
+            var dotPath = await _generator.GenerateAsync(graph, outputDir, solutionName, cycles);
+            var dotContent = await File.ReadAllTextAsync(dotPath);
+
+            // Assert - Cycle wins over cross-solution (red not blue)
+            dotContent.Should().Contain("ProjectA\" -> \"ProjectB\" [color=\"red\"");
+            dotContent.Should().NotContain("ProjectA\" -> \"ProjectB\" [color=\"blue\"");
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(outputDir))
+                    Directory.Delete(outputDir, true);
+            }
+            catch
+            {
+                // Ignore cleanup errors
+            }
+        }
+    }
+
+    [Fact]
+    public async Task GenerateAsync_CyclesWithNoMatchingEdges_NoRedEdges()
+    {
+        // Arrange - Create graph with edges A->B, but cycles containing C->D (no matching edges)
+        var graph = new DependencyGraph();
+        var projectA = new ProjectNode
+        {
+            ProjectName = "ProjectA",
+            ProjectPath = "/path/to/ProjectA.csproj",
+            TargetFramework = "net8.0",
+            SolutionName = "Solution1"
+        };
+        var projectB = new ProjectNode
+        {
+            ProjectName = "ProjectB",
+            ProjectPath = "/path/to/ProjectB.csproj",
+            TargetFramework = "net8.0",
+            SolutionName = "Solution1"
+        };
+        var projectC = new ProjectNode
+        {
+            ProjectName = "ProjectC",
+            ProjectPath = "/path/to/ProjectC.csproj",
+            TargetFramework = "net8.0",
+            SolutionName = "Solution1"
+        };
+        var projectD = new ProjectNode
+        {
+            ProjectName = "ProjectD",
+            ProjectPath = "/path/to/ProjectD.csproj",
+            TargetFramework = "net8.0",
+            SolutionName = "Solution1"
+        };
+
+        graph.AddVertex(projectA);
+        graph.AddVertex(projectB);
+        graph.AddEdge(new DependencyEdge
+        {
+            Source = projectA,
+            Target = projectB,
+            DependencyType = DependencyType.ProjectReference
+        });
+
+        // Cycles contain C and D, but graph only has edge A->B
+        var cycles = new List<CycleInfo> { new CycleInfo(1, new[] { projectC, projectD }) };
+        var outputDir = Path.Combine(Path.GetTempPath(), "dot-test-" + Guid.NewGuid());
+        var solutionName = "TestSolution";
+
+        try
+        {
+            // Act
+            var dotPath = await _generator.GenerateAsync(graph, outputDir, solutionName, cycles);
+            var dotContent = await File.ReadAllTextAsync(dotPath);
+
+            // Assert - No red edges because cycle projects don't match graph edges
+            dotContent.Should().NotContain("color=\"red\"");
+            dotContent.Should().Contain("\"ProjectA\" -> \"ProjectB\" [color=\"black\"]");
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(outputDir))
+                    Directory.Delete(outputDir, true);
+            }
+            catch
+            {
+                // Ignore cleanup errors
+            }
+        }
+    }
+
+    // ========== HELPER METHODS ==========
+
+    private DependencyGraph CreateGraphWithCycle()
+    {
+        // ProjectA -> ProjectB -> ProjectC -> ProjectA (3-node cycle)
+        var graph = new DependencyGraph();
+        var projectA = new ProjectNode
+        {
+            ProjectName = "ProjectA",
+            ProjectPath = "/path/to/ProjectA.csproj",
+            TargetFramework = "net8.0",
+            SolutionName = "Solution1"
+        };
+        var projectB = new ProjectNode
+        {
+            ProjectName = "ProjectB",
+            ProjectPath = "/path/to/ProjectB.csproj",
+            TargetFramework = "net8.0",
+            SolutionName = "Solution1"
+        };
+        var projectC = new ProjectNode
+        {
+            ProjectName = "ProjectC",
+            ProjectPath = "/path/to/ProjectC.csproj",
+            TargetFramework = "net8.0",
+            SolutionName = "Solution1"
+        };
+
+        graph.AddVertex(projectA);
+        graph.AddVertex(projectB);
+        graph.AddVertex(projectC);
+
+        graph.AddEdge(new DependencyEdge
+        {
+            Source = projectA,
+            Target = projectB,
+            DependencyType = DependencyType.ProjectReference
+        });
+        graph.AddEdge(new DependencyEdge
+        {
+            Source = projectB,
+            Target = projectC,
+            DependencyType = DependencyType.ProjectReference
+        });
+        graph.AddEdge(new DependencyEdge
+        {
+            Source = projectC,
+            Target = projectA,
+            DependencyType = DependencyType.ProjectReference
+        });
+
+        return graph;
+    }
+
+    private DependencyGraph CreateGraphWithCycleAndNonCyclicEdge()
+    {
+        // A->B->A (cycle), C->D (not cyclic)
+        var graph = new DependencyGraph();
+        var projectA = new ProjectNode
+        {
+            ProjectName = "ProjectA",
+            ProjectPath = "/path/to/ProjectA.csproj",
+            TargetFramework = "net8.0",
+            SolutionName = "Solution1"
+        };
+        var projectB = new ProjectNode
+        {
+            ProjectName = "ProjectB",
+            ProjectPath = "/path/to/ProjectB.csproj",
+            TargetFramework = "net8.0",
+            SolutionName = "Solution1"
+        };
+        var projectC = new ProjectNode
+        {
+            ProjectName = "ProjectC",
+            ProjectPath = "/path/to/ProjectC.csproj",
+            TargetFramework = "net8.0",
+            SolutionName = "Solution1"
+        };
+        var projectD = new ProjectNode
+        {
+            ProjectName = "ProjectD",
+            ProjectPath = "/path/to/ProjectD.csproj",
+            TargetFramework = "net8.0",
+            SolutionName = "Solution1"
+        };
+
+        graph.AddVertex(projectA);
+        graph.AddVertex(projectB);
+        graph.AddVertex(projectC);
+        graph.AddVertex(projectD);
+
+        graph.AddEdge(new DependencyEdge
+        {
+            Source = projectA,
+            Target = projectB,
+            DependencyType = DependencyType.ProjectReference
+        });
+        graph.AddEdge(new DependencyEdge
+        {
+            Source = projectB,
+            Target = projectA,
+            DependencyType = DependencyType.ProjectReference
+        });
+        graph.AddEdge(new DependencyEdge
+        {
+            Source = projectC,
+            Target = projectD,
+            DependencyType = DependencyType.ProjectReference
+        });
+
+        return graph;
+    }
+
+    private DependencyGraph CreateGraphWithMultipleCycles()
+    {
+        // Cycle 1: A->B->A, Cycle 2: C->D->C
+        var graph = new DependencyGraph();
+        var projectA = new ProjectNode
+        {
+            ProjectName = "ProjectA",
+            ProjectPath = "/path/to/ProjectA.csproj",
+            TargetFramework = "net8.0",
+            SolutionName = "Solution1"
+        };
+        var projectB = new ProjectNode
+        {
+            ProjectName = "ProjectB",
+            ProjectPath = "/path/to/ProjectB.csproj",
+            TargetFramework = "net8.0",
+            SolutionName = "Solution1"
+        };
+        var projectC = new ProjectNode
+        {
+            ProjectName = "ProjectC",
+            ProjectPath = "/path/to/ProjectC.csproj",
+            TargetFramework = "net8.0",
+            SolutionName = "Solution1"
+        };
+        var projectD = new ProjectNode
+        {
+            ProjectName = "ProjectD",
+            ProjectPath = "/path/to/ProjectD.csproj",
+            TargetFramework = "net8.0",
+            SolutionName = "Solution1"
+        };
+
+        graph.AddVertex(projectA);
+        graph.AddVertex(projectB);
+        graph.AddVertex(projectC);
+        graph.AddVertex(projectD);
+
+        graph.AddEdge(new DependencyEdge
+        {
+            Source = projectA,
+            Target = projectB,
+            DependencyType = DependencyType.ProjectReference
+        });
+        graph.AddEdge(new DependencyEdge
+        {
+            Source = projectB,
+            Target = projectA,
+            DependencyType = DependencyType.ProjectReference
+        });
+        graph.AddEdge(new DependencyEdge
+        {
+            Source = projectC,
+            Target = projectD,
+            DependencyType = DependencyType.ProjectReference
+        });
+        graph.AddEdge(new DependencyEdge
+        {
+            Source = projectD,
+            Target = projectC,
+            DependencyType = DependencyType.ProjectReference
+        });
+
+        return graph;
+    }
+
+    private DependencyGraph CreateGraphWithCyclicCrossSolutionEdge()
+    {
+        // A->B (both in cycle AND cross-solution)
+        var graph = new DependencyGraph();
+        var projectA = new ProjectNode
+        {
+            ProjectName = "ProjectA",
+            ProjectPath = "/path/to/ProjectA.csproj",
+            TargetFramework = "net8.0",
+            SolutionName = "Solution1"
+        };
+        var projectB = new ProjectNode
+        {
+            ProjectName = "ProjectB",
+            ProjectPath = "/path/to/ProjectB.csproj",
+            TargetFramework = "net8.0",
+            SolutionName = "Solution2" // Different solution
+        };
+
+        graph.AddVertex(projectA);
+        graph.AddVertex(projectB);
+
+        graph.AddEdge(new DependencyEdge
+        {
+            Source = projectA,
+            Target = projectB,
+            DependencyType = DependencyType.ProjectReference
+        });
+        graph.AddEdge(new DependencyEdge
+        {
+            Source = projectB,
+            Target = projectA,
+            DependencyType = DependencyType.ProjectReference
+        });
+
+        return graph;
     }
 
     private DependencyGraph CreateSimpleGraph()
