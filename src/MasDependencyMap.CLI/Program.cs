@@ -1,6 +1,7 @@
 using MasDependencyMap.Core.Configuration;
 using MasDependencyMap.Core.CycleAnalysis;
 using MasDependencyMap.Core.DependencyAnalysis;
+using MasDependencyMap.Core.ExtractionScoring;
 using MasDependencyMap.Core.Filtering;
 using MasDependencyMap.Core.Rendering;
 using MasDependencyMap.Core.SolutionLoading;
@@ -143,6 +144,9 @@ public class Program
         services.TryAddSingleton<ICouplingAnalyzer, RoslynCouplingAnalyzer>();
         services.TryAddSingleton<IWeakEdgeIdentifier, WeakEdgeIdentifier>();
         services.TryAddSingleton<IRecommendationGenerator, RecommendationGenerator>();
+
+        // Epic 4: Extraction Scoring Services
+        services.TryAddSingleton<ICouplingMetricCalculator, CouplingMetricCalculator>();
 
         // Register FilterConfiguration with validation
         services

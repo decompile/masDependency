@@ -21,7 +21,10 @@
       "WebFetch(domain:www.nuget.org)",
       "Bash(git push:*)",
       "Bash(git log:*)",
-      "Bash(findstr:*)"
+      "Bash(findstr:*)",
+      "WebFetch(domain:github.com)",
+      "Bash(cd:*)",
+      "Bash(ls:*)"
     ]
   }
 }
