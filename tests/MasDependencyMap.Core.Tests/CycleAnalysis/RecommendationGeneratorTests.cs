@@ -161,7 +161,9 @@ public class RecommendationGeneratorTests
     public async Task GenerateRecommendationsAsync_NullCycles_ThrowsArgumentNullException()
     {
         // Act & Assert
-        var act = async () => await _generator.GenerateRecommendationsAsync(null!);
+#pragma warning disable CS8625 // Cannot convert null literal to non-nullable reference type
+        var act = async () => await _generator.GenerateRecommendationsAsync(null);
+#pragma warning restore CS8625
         await act.Should().ThrowAsync<ArgumentNullException>();
     }
 
@@ -196,6 +198,39 @@ public class RecommendationGeneratorTests
         top5[0].Rank.Should().Be(1);
         top5[4].Rank.Should().Be(5);
         top5.Should().BeInAscendingOrder(r => r.CouplingScore); // Lowest coupling first
+    }
+
+    [Fact]
+    public async Task GenerateRecommendationsAsync_ZeroCouplingScore_HandlesGracefully()
+    {
+        // Arrange
+        var cycle = CreateCycleWithWeakEdges(1, 3, new[] { 0 }); // Edge case: 0 coupling
+
+        // Act
+        var result = await _generator.GenerateRecommendationsAsync(new[] { cycle });
+
+        // Assert
+        result.Should().HaveCount(1);
+        result[0].CouplingScore.Should().Be(0);
+        result[0].Rank.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task GenerateRecommendationsAsync_LargeDataset_PerformsEfficiently()
+    {
+        // Arrange
+        var largeCycleSet = CreateManyCycles(1000); // 1000 recommendations
+
+        // Act
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var result = await _generator.GenerateRecommendationsAsync(largeCycleSet);
+        stopwatch.Stop();
+
+        // Assert
+        result.Should().HaveCount(1000);
+        result[0].Rank.Should().Be(1);
+        result[999].Rank.Should().Be(1000);
+        stopwatch.ElapsedMilliseconds.Should().BeLessThan(1000); // Should complete within 1 second
     }
 
     // Helper methods for creating test data

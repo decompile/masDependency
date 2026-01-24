@@ -18,13 +18,13 @@ public sealed class RecommendationGenerator : IRecommendationGenerator
     /// <summary>
     /// Generates ranked cycle-breaking recommendations from cycles with weak edges.
     /// </summary>
-    public async Task<IReadOnlyList<CycleBreakingSuggestion>> GenerateRecommendationsAsync(
+    public Task<IReadOnlyList<CycleBreakingSuggestion>> GenerateRecommendationsAsync(
         IReadOnlyList<CycleInfo> cycles,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(cycles);
 
-        _logger.LogInformation(
+        _logger.LogDebug(
             "Generating cycle-breaking recommendations from {CycleCount} cycles",
             cycles.Count);
 
@@ -65,20 +65,15 @@ public sealed class RecommendationGenerator : IRecommendationGenerator
         }
 
         // Rank recommendations: lowest coupling first, then largest cycle, then alphabetical
+        // Assign rank numbers during LINQ chain to avoid re-creating record objects
         var rankedRecommendations = recommendations
             .OrderBy(r => r.CouplingScore)           // Primary: Lowest coupling first
             .ThenByDescending(r => r.CycleSize)      // Secondary: Largest cycle first
             .ThenBy(r => r.SourceProject.ProjectName) // Tertiary: Alphabetical
+            .Select((r, index) => r with { Rank = index + 1 }) // Assign rank (1-based)
             .ToList();
 
-        // Assign rank numbers (1-based)
-        for (int i = 0; i < rankedRecommendations.Count; i++)
-        {
-            var updated = rankedRecommendations[i] with { Rank = i + 1 };
-            rankedRecommendations[i] = updated;
-        }
-
-        _logger.LogInformation(
+        _logger.LogDebug(
             "Generated {RecommendationCount} cycle-breaking recommendations",
             rankedRecommendations.Count);
 
@@ -93,7 +88,7 @@ public sealed class RecommendationGenerator : IRecommendationGenerator
                 top.CycleSize);
         }
 
-        return await Task.FromResult<IReadOnlyList<CycleBreakingSuggestion>>(rankedRecommendations);
+        return Task.FromResult<IReadOnlyList<CycleBreakingSuggestion>>(rankedRecommendations);
     }
 
     /// <summary>

@@ -76,7 +76,7 @@ public sealed record CycleBreakingSuggestion : IComparable<CycleBreakingSuggesti
     /// </summary>
     public int CompareTo(CycleBreakingSuggestion? other)
     {
-        if (other == null) return 1;
+        if (other == null) return 1; // Null sorts after all non-null values
 
         // Primary: Lowest coupling score first (easier to break)
         var couplingComparison = CouplingScore.CompareTo(other.CouplingScore);
