@@ -1,4 +1,5 @@
 using MasDependencyMap.Core.Configuration;
+using MasDependencyMap.Core.CycleAnalysis;
 using MasDependencyMap.Core.DependencyAnalysis;
 using MasDependencyMap.Core.Filtering;
 using MasDependencyMap.Core.Rendering;
@@ -137,6 +138,7 @@ public class Program
         services.TryAddSingleton<IDependencyGraphBuilder, DependencyGraphBuilder>();
         services.TryAddSingleton<IFrameworkFilter, FrameworkFilter>();
         services.TryAddSingleton<MasDependencyMap.Core.Visualization.IDotGenerator, MasDependencyMap.Core.Visualization.DotGenerator>();
+        services.TryAddSingleton<ITarjanCycleDetector, TarjanCycleDetector>();
 
         // Register FilterConfiguration with validation
         services

@@ -64,8 +64,8 @@ development_status:
   2-10-support-multi-solution-analysis: review
   epic-2-retrospective: optional
 
-  epic-3: backlog
-  3-1-implement-tarjans-scc-algorithm-for-cycle-detection: backlog
+  epic-3: in-progress
+  3-1-implement-tarjans-scc-algorithm-for-cycle-detection: review
   3-2-calculate-cycle-statistics-and-participation-rates: backlog
   3-3-implement-coupling-strength-analysis-via-method-call-counting: backlog
   3-4-identify-weakest-coupling-edges-within-cycles: backlog
