@@ -481,6 +481,7 @@ public class DotGeneratorTests
                 outputDir,
                 "Test",
                 cycles: null,
+                recommendations: null,
                 cts.Token);
 
             // Assert
@@ -694,7 +695,7 @@ public class DotGeneratorTests
 
             // Assert
             dotContent.Should().Contain("Red: Circular Dependencies");
-            dotContent.Should().Contain("subgraph cluster_cycle_legend");
+            dotContent.Should().Contain("subgraph cluster_dependency_legend");
             dotContent.Should().Contain("Dependency Types");
         }
         finally
@@ -879,6 +880,393 @@ public class DotGeneratorTests
                 // Ignore cleanup errors
             }
         }
+    }
+
+    // ========== NEW TESTS FOR STORY 3.7: BREAK POINT HIGHLIGHTING ==========
+
+    [Fact]
+    public async Task GenerateAsync_WithRecommendations_BreakPointEdgesAreYellow()
+    {
+        // Arrange
+        var graph = CreateGraphWithCycle();
+        var cycles = new List<CycleInfo> { new CycleInfo(1, graph.Vertices.ToList()) };
+        var recommendations = new List<CycleBreakingSuggestion>
+        {
+            new CycleBreakingSuggestion(
+                cycleId: 1,
+                sourceProject: graph.Vertices.ElementAt(0),
+                targetProject: graph.Vertices.ElementAt(1),
+                couplingScore: 3,
+                cycleSize: 3,
+                rationale: "Weakest link in cycle")
+        };
+        var outputDir = Path.Combine(Path.GetTempPath(), "dot-test-" + Guid.NewGuid());
+        var solutionName = "TestSolution";
+
+        try
+        {
+            // Act
+            var dotPath = await _generator.GenerateAsync(graph, outputDir, solutionName, cycles, recommendations);
+            var dotContent = await File.ReadAllTextAsync(dotPath);
+
+            // Assert
+            dotContent.Should().Contain("color=\"yellow\"");
+            dotContent.Should().Contain("\"ProjectA\" -> \"ProjectB\" [color=\"yellow\", style=\"bold\"]");
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(outputDir))
+                    Directory.Delete(outputDir, true);
+            }
+            catch
+            {
+                // Ignore cleanup errors
+            }
+        }
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WithRecommendations_EdgesNotInRecommendationsUseDefaultColor()
+    {
+        // Arrange
+        var graph = CreateGraphWithCycleAndNonCyclicEdge();
+        var cycleProjects = new List<ProjectNode> { graph.Vertices.ElementAt(0), graph.Vertices.ElementAt(1) };
+        var cycles = new List<CycleInfo> { new CycleInfo(1, cycleProjects) };
+        var recommendations = new List<CycleBreakingSuggestion>
+        {
+            new CycleBreakingSuggestion(
+                cycleId: 1,
+                sourceProject: graph.Vertices.ElementAt(0),
+                targetProject: graph.Vertices.ElementAt(1),
+                couplingScore: 3,
+                cycleSize: 2,
+                rationale: "Weakest link")
+        };
+        var outputDir = Path.Combine(Path.GetTempPath(), "dot-test-" + Guid.NewGuid());
+        var solutionName = "TestSolution";
+
+        try
+        {
+            // Act
+            var dotPath = await _generator.GenerateAsync(graph, outputDir, solutionName, cycles, recommendations);
+            var dotContent = await File.ReadAllTextAsync(dotPath);
+
+            // Assert - Non-recommended edges use their appropriate colors
+            dotContent.Should().Contain("\"ProjectC\" -> \"ProjectD\" [color=\"black\"]");  // Non-cyclic edge
+            dotContent.Should().Contain("\"ProjectB\" -> \"ProjectA\"");  // Cyclic but not recommended
+            dotContent.Should().NotContain("\"ProjectB\" -> \"ProjectA\" [color=\"yellow\"");  // Should be RED not YELLOW
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(outputDir))
+                    Directory.Delete(outputDir, true);
+            }
+            catch
+            {
+                // Ignore cleanup errors
+            }
+        }
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WithRecommendationsAndCycles_YellowOverridesRed()
+    {
+        // CRITICAL TEST: Validates color priority - YELLOW > RED
+        // Arrange
+        var graph = CreateGraphWithCycle();
+        var cycles = new List<CycleInfo> { new CycleInfo(1, graph.Vertices.ToList()) };
+        var recommendations = new List<CycleBreakingSuggestion>
+        {
+            new CycleBreakingSuggestion(
+                cycleId: 1,
+                sourceProject: graph.Vertices.ElementAt(0),  // ProjectA
+                targetProject: graph.Vertices.ElementAt(1),  // ProjectB
+                couplingScore: 3,
+                cycleSize: 3,
+                rationale: "Weakest link in cycle")
+        };
+        var outputDir = Path.Combine(Path.GetTempPath(), "dot-test-" + Guid.NewGuid());
+        var solutionName = "TestSolution";
+
+        try
+        {
+            // Act
+            var dotPath = await _generator.GenerateAsync(graph, outputDir, solutionName, cycles, recommendations);
+            var dotContent = await File.ReadAllTextAsync(dotPath);
+
+            // Assert - YELLOW wins over RED for recommended edge
+            dotContent.Should().Contain("\"ProjectA\" -> \"ProjectB\" [color=\"yellow\", style=\"bold\"]");
+            dotContent.Should().NotContain("\"ProjectA\" -> \"ProjectB\" [color=\"red\"");
+
+            // Other cyclic edges (not recommended) should still be RED
+            dotContent.Should().Contain("\"ProjectB\" -> \"ProjectC\" [color=\"red\", style=\"bold\"]");
+            dotContent.Should().Contain("\"ProjectC\" -> \"ProjectA\" [color=\"red\", style=\"bold\"]");
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(outputDir))
+                    Directory.Delete(outputDir, true);
+            }
+            catch
+            {
+                // Ignore cleanup errors
+            }
+        }
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WithRecommendations_LegendIncludesSuggestedBreakPoints()
+    {
+        // Arrange
+        var graph = CreateGraphWithCycle();
+        var cycles = new List<CycleInfo> { new CycleInfo(1, graph.Vertices.ToList()) };
+        var recommendations = new List<CycleBreakingSuggestion>
+        {
+            new CycleBreakingSuggestion(
+                cycleId: 1,
+                sourceProject: graph.Vertices.ElementAt(0),
+                targetProject: graph.Vertices.ElementAt(1),
+                couplingScore: 3,
+                cycleSize: 3,
+                rationale: "Weakest link")
+        };
+        var outputDir = Path.Combine(Path.GetTempPath(), "dot-test-" + Guid.NewGuid());
+        var solutionName = "TestSolution";
+
+        try
+        {
+            // Act
+            var dotPath = await _generator.GenerateAsync(graph, outputDir, solutionName, cycles, recommendations);
+            var dotContent = await File.ReadAllTextAsync(dotPath);
+
+            // Assert
+            dotContent.Should().Contain("Yellow: Suggested Break Points");
+            dotContent.Should().Contain("subgraph cluster_dependency_legend");
+            dotContent.Should().Contain("color=\"yellow\"");
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(outputDir))
+                    Directory.Delete(outputDir, true);
+            }
+            catch
+            {
+                // Ignore cleanup errors
+            }
+        }
+    }
+
+    [Fact]
+    public async Task GenerateAsync_NullRecommendations_NoYellowEdges()
+    {
+        // Arrange
+        var graph = CreateGraphWithCycle();
+        var cycles = new List<CycleInfo> { new CycleInfo(1, graph.Vertices.ToList()) };
+        var outputDir = Path.Combine(Path.GetTempPath(), "dot-test-" + Guid.NewGuid());
+        var solutionName = "TestSolution";
+
+        try
+        {
+            // Act - Story 3.6 usage pattern (cycles but no recommendations)
+            var dotPath = await _generator.GenerateAsync(graph, outputDir, solutionName, cycles, recommendations: null);
+            var dotContent = await File.ReadAllTextAsync(dotPath);
+
+            // Assert - No YELLOW highlighting when recommendations is null
+            dotContent.Should().NotContain("color=\"yellow\"");
+            dotContent.Should().NotContain("Suggested Break Points");
+            // But RED cycle highlighting should still work
+            dotContent.Should().Contain("color=\"red\"");
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(outputDir))
+                    Directory.Delete(outputDir, true);
+            }
+            catch
+            {
+                // Ignore cleanup errors
+            }
+        }
+    }
+
+    [Fact]
+    public async Task GenerateAsync_EmptyRecommendations_NoYellowEdges()
+    {
+        // Arrange
+        var graph = CreateGraphWithCycle();
+        var cycles = new List<CycleInfo> { new CycleInfo(1, graph.Vertices.ToList()) };
+        var recommendations = new List<CycleBreakingSuggestion>(); // Empty list
+        var outputDir = Path.Combine(Path.GetTempPath(), "dot-test-" + Guid.NewGuid());
+        var solutionName = "TestSolution";
+
+        try
+        {
+            // Act
+            var dotPath = await _generator.GenerateAsync(graph, outputDir, solutionName, cycles, recommendations);
+            var dotContent = await File.ReadAllTextAsync(dotPath);
+
+            // Assert
+            dotContent.Should().NotContain("color=\"yellow\"");
+            dotContent.Should().NotContain("Suggested Break Points");
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(outputDir))
+                    Directory.Delete(outputDir, true);
+            }
+            catch
+            {
+                // Ignore cleanup errors
+            }
+        }
+    }
+
+    [Fact]
+    public async Task GenerateAsync_MoreThan10Recommendations_OnlyTop10AreYellow()
+    {
+        // CRITICAL TEST: Validates top 10 limit to avoid visual clutter
+        // Arrange
+        var graph = CreateGraphWithManyEdges();
+        var cycles = new List<CycleInfo> { new CycleInfo(1, graph.Vertices.ToList()) };
+        var recommendations = new List<CycleBreakingSuggestion>();
+
+        // Create 15 recommendations with varying coupling scores
+        for (int i = 0; i < 15 && i < graph.Vertices.Count() - 1; i++)
+        {
+            recommendations.Add(new CycleBreakingSuggestion(
+                cycleId: 1,
+                sourceProject: graph.Vertices.ElementAt(i),
+                targetProject: graph.Vertices.ElementAt(i + 1),
+                couplingScore: i + 1,  // Vary coupling scores
+                cycleSize: 15,
+                rationale: $"Weak link {i}"));
+        }
+
+        var outputDir = Path.Combine(Path.GetTempPath(), "dot-test-" + Guid.NewGuid());
+        var solutionName = "TestSolution";
+
+        try
+        {
+            // Act
+            var dotPath = await _generator.GenerateAsync(graph, outputDir, solutionName, cycles, recommendations);
+            var dotContent = await File.ReadAllTextAsync(dotPath);
+
+            // Assert - Count YELLOW edges (should be exactly 10, not 15)
+            // Count only edge lines (with "->") that have color="yellow", not legend entries
+            var yellowEdgeMatches = System.Text.RegularExpressions.Regex.Matches(dotContent, @"->\s+\S+\s+\[color=""yellow""");
+            yellowEdgeMatches.Count.Should().Be(10, "Only top 10 recommendations should be marked in yellow");
+
+            // Legend should indicate "Top"
+            dotContent.Should().ContainAny("Top 10", "top 10");
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(outputDir))
+                    Directory.Delete(outputDir, true);
+            }
+            catch
+            {
+                // Ignore cleanup errors
+            }
+        }
+    }
+
+    [Fact]
+    public async Task GenerateAsync_RecommendationsWithNoCycles_YellowOnlyBreakPoints()
+    {
+        // Arrange - Graph with recommendations but no cycles parameter
+        var graph = CreateGraphWithCycle();
+        var recommendations = new List<CycleBreakingSuggestion>
+        {
+            new CycleBreakingSuggestion(
+                cycleId: 1,
+                sourceProject: graph.Vertices.ElementAt(0),
+                targetProject: graph.Vertices.ElementAt(1),
+                couplingScore: 3,
+                cycleSize: 3,
+                rationale: "Weakest link")
+        };
+        var outputDir = Path.Combine(Path.GetTempPath(), "dot-test-" + Guid.NewGuid());
+        var solutionName = "TestSolution";
+
+        try
+        {
+            // Act - Recommendations without cycles
+            var dotPath = await _generator.GenerateAsync(graph, outputDir, solutionName, cycles: null, recommendations);
+            var dotContent = await File.ReadAllTextAsync(dotPath);
+
+            // Assert - YELLOW edges present, no RED edges
+            dotContent.Should().Contain("color=\"yellow\"");
+            dotContent.Should().NotContain("color=\"red\"");
+            dotContent.Should().Contain("Yellow: Suggested Break Points");
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(outputDir))
+                    Directory.Delete(outputDir, true);
+            }
+            catch
+            {
+                // Ignore cleanup errors
+            }
+        }
+    }
+
+    // ========== HELPER METHODS ==========
+
+    private DependencyGraph CreateGraphWithManyEdges()
+    {
+        // Create graph with 15+ nodes for testing top 10 limit
+        var graph = new DependencyGraph();
+
+        for (int i = 0; i < 15; i++)
+        {
+            var project = new ProjectNode
+            {
+                ProjectName = $"Project{i}",
+                ProjectPath = $"/path/to/Project{i}.csproj",
+                TargetFramework = "net8.0",
+                SolutionName = "Solution1"
+            };
+            graph.AddVertex(project);
+        }
+
+        // Create a chain of edges
+        for (int i = 0; i < 14; i++)
+        {
+            graph.AddEdge(new DependencyEdge
+            {
+                Source = graph.Vertices.ElementAt(i),
+                Target = graph.Vertices.ElementAt(i + 1),
+                DependencyType = DependencyType.ProjectReference
+            });
+        }
+
+        // Close the cycle
+        graph.AddEdge(new DependencyEdge
+        {
+            Source = graph.Vertices.ElementAt(14),
+            Target = graph.Vertices.ElementAt(0),
+            DependencyType = DependencyType.ProjectReference
+        });
+
+        return graph;
     }
 
     // ========== HELPER METHODS ==========

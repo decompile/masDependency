@@ -373,6 +373,8 @@ public class Program
                 ansiConsole.MarkupLine("[cyan]Detecting circular dependencies...[/]");
                 var cycles = await cycleDetector.DetectCyclesAsync(filteredGraph, cancellationToken);
 
+                IReadOnlyList<CycleBreakingSuggestion>? recommendations = null;
+
                 if (cycles.Count > 0)
                 {
                     var statsCalculator = serviceProvider.GetRequiredService<ICycleStatisticsCalculator>();
@@ -381,14 +383,23 @@ public class Program
                     ansiConsole.MarkupLine($"[yellow]⚠ Found {statistics.TotalCycles} circular dependency chains[/]");
                     ansiConsole.MarkupLine($"[dim]  Projects in cycles:[/] {statistics.TotalProjectsInCycles} ({statistics.ParticipationRate:F1}%)");
                     ansiConsole.MarkupLine($"[dim]  Largest cycle:[/] {statistics.LargestCycleSize} projects");
+
+                    // Generate cycle-breaking recommendations
+                    var recommendationGenerator = serviceProvider.GetRequiredService<IRecommendationGenerator>();
+                    recommendations = await recommendationGenerator.GenerateRecommendationsAsync(cycles, cancellationToken);
+
+                    if (recommendations.Count > 0)
+                    {
+                        ansiConsole.MarkupLine($"[dim]  Break suggestions:[/] {Math.Min(recommendations.Count, 10)} recommended edges to break cycles");
+                    }
                 }
                 else
                 {
                     ansiConsole.MarkupLine("[green]✓[/] No circular dependencies detected");
                 }
 
-                // Generate DOT file with cycle highlighting
-                var dotFilePath = await dotGenerator.GenerateAsync(filteredGraph, outputDir, solutionName, cycles, cancellationToken);
+                // Generate DOT file with cycle and recommendation highlighting
+                var dotFilePath = await dotGenerator.GenerateAsync(filteredGraph, outputDir, solutionName, cycles, recommendations, cancellationToken);
                 ansiConsole.MarkupLine($"[green]✓[/] Generated DOT file: {Path.GetFileName(dotFilePath)}");
 
                 // Render to image formats if Graphviz is available

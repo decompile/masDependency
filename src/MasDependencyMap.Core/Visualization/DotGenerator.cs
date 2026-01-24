@@ -25,6 +25,7 @@ public class DotGenerator : IDotGenerator
         string outputDirectory,
         string solutionName,
         IReadOnlyList<CycleInfo>? cycles = null,
+        IReadOnlyList<CycleBreakingSuggestion>? recommendations = null,
         CancellationToken cancellationToken = default)
     {
         // Validation
@@ -46,7 +47,7 @@ public class DotGenerator : IDotGenerator
         }
 
         // Build DOT content
-        var dotContent = BuildDotContent(graph, cycles, out bool isMultiSolution);
+        var dotContent = BuildDotContent(graph, cycles, recommendations, out bool isMultiSolution);
 
         // Prepare output path with multi-solution naming support
         var sanitizedSolutionName = SanitizeFileName(solutionName);
@@ -110,11 +111,55 @@ public class DotGenerator : IDotGenerator
         return cyclicEdges;
     }
 
-    private string BuildDotContent(DependencyGraph graph, IReadOnlyList<CycleInfo>? cycles, out bool isMultiSolution)
+    private HashSet<(string source, string target)> BuildBreakPointEdgeSet(
+        IReadOnlyList<CycleBreakingSuggestion> recommendations,
+        int maxSuggestions = 10)
+    {
+        var breakPointEdges = new HashSet<(string, string)>();
+
+        // Take top N recommendations to avoid visual clutter
+        var topRecommendations = recommendations
+            .OrderBy(r => r.CouplingScore)  // Lowest coupling score first (weakest links)
+            .Take(maxSuggestions)
+            .ToList();
+
+        foreach (var recommendation in topRecommendations)
+        {
+            // Extract source and target project names from recommendation
+            var sourceProjectName = recommendation.SourceProject?.ProjectName;
+            var targetProjectName = recommendation.TargetProject?.ProjectName;
+
+            if (string.IsNullOrWhiteSpace(sourceProjectName) || string.IsNullOrWhiteSpace(targetProjectName))
+            {
+                _logger.LogWarning(
+                    "Skipping recommendation with null/empty project names: {Source} -> {Target}",
+                    sourceProjectName ?? "(null)",
+                    targetProjectName ?? "(null)");
+                continue;
+            }
+
+            breakPointEdges.Add((sourceProjectName, targetProjectName));
+        }
+
+        _logger.LogDebug(
+            "Identified {BreakPointCount} break point edges from {TotalRecommendations} recommendations (top {MaxSuggestions})",
+            breakPointEdges.Count,
+            recommendations.Count,
+            maxSuggestions);
+
+        return breakPointEdges;
+    }
+
+    private string BuildDotContent(DependencyGraph graph, IReadOnlyList<CycleInfo>? cycles, IReadOnlyList<CycleBreakingSuggestion>? recommendations, out bool isMultiSolution)
     {
         // Build cyclic edge set for O(1) lookup during edge generation
         var cyclicEdges = cycles != null && cycles.Count > 0
             ? BuildCyclicEdgeSet(cycles, graph)
+            : new HashSet<(string, string)>();
+
+        // Build break point edge set for O(1) lookup during edge generation
+        var breakPointEdges = recommendations != null && recommendations.Count > 0
+            ? BuildBreakPointEdgeSet(recommendations)
             : new HashSet<(string, string)>();
 
         // Detect multi-solution graphs
@@ -190,7 +235,8 @@ public class DotGenerator : IDotGenerator
 
         builder.AppendLine();
 
-        // Edges with cycle and cross-solution highlighting
+        // Edges with break point, cycle, and cross-solution highlighting
+        var breakPointEdgeCount = 0;
         var cyclicEdgeCount = 0;
         var crossSolutionCount = 0;
         foreach (var edge in graph.Edges)
@@ -198,8 +244,14 @@ public class DotGenerator : IDotGenerator
             var sourceEscaped = EscapeDotIdentifier(edge.Source.ProjectName);
             var targetEscaped = EscapeDotIdentifier(edge.Target.ProjectName);
 
-            // Check if edge is cyclic (highest priority)
-            if (cyclicEdges.Contains((edge.Source.ProjectName, edge.Target.ProjectName)))
+            // Check if edge is a suggested break point (HIGHEST PRIORITY)
+            if (breakPointEdges.Contains((edge.Source.ProjectName, edge.Target.ProjectName)))
+            {
+                builder.AppendLine($"    {sourceEscaped} -> {targetEscaped} [color=\"yellow\", style=\"bold\"];");
+                breakPointEdgeCount++;
+            }
+            // Check if edge is cyclic (medium-high priority)
+            else if (cyclicEdges.Contains((edge.Source.ProjectName, edge.Target.ProjectName)))
             {
                 builder.AppendLine($"    {sourceEscaped} -> {targetEscaped} [color=\"red\", style=\"bold\"];");
                 cyclicEdgeCount++;
@@ -207,16 +259,21 @@ public class DotGenerator : IDotGenerator
             // Check if edge is cross-solution (medium priority)
             else if (edge.IsCrossSolution)
             {
-                // Blue color and bold style for cross-solution dependencies (changed from red to avoid conflict)
+                // Blue color and bold style for cross-solution dependencies
                 builder.AppendLine($"    {sourceEscaped} -> {targetEscaped} [color=\"blue\", style=\"bold\"];");
                 crossSolutionCount++;
             }
-            // Default: intra-solution, non-cyclic
+            // Default: intra-solution, non-cyclic, not a break suggestion
             else
             {
-                // Black color for intra-solution dependencies
+                // Black color for normal dependencies
                 builder.AppendLine($"    {sourceEscaped} -> {targetEscaped} [color=\"black\"];");
             }
+        }
+
+        if (breakPointEdgeCount > 0)
+        {
+            _logger.LogDebug("Applied break point highlighting: {BreakPointCount} edges marked in yellow", breakPointEdgeCount);
         }
 
         if (cyclicEdgeCount > 0)
@@ -229,27 +286,42 @@ public class DotGenerator : IDotGenerator
             _logger.LogDebug("Applied cross-solution highlighting: {CrossSolutionCount} edges marked in blue", crossSolutionCount);
         }
 
-        // Add cycle legend when cycles are provided and detected
-        if (cycles != null && cycles.Count > 0 && cyclicEdgeCount > 0)
+        // Add legend when any highlighting is active (cycles OR recommendations)
+        if ((cycles != null && cycles.Count > 0 && cyclicEdgeCount > 0) ||
+            (recommendations != null && recommendations.Count > 0 && breakPointEdgeCount > 0))
         {
             builder.AppendLine();
             builder.AppendLine("    // Legend - Dependency Types");
-            builder.AppendLine("    subgraph cluster_cycle_legend {");
+            builder.AppendLine("    subgraph cluster_dependency_legend {");
             builder.AppendLine("        label=\"Dependency Types\";");
             builder.AppendLine("        style=dashed;");
             builder.AppendLine("        color=gray;");
             builder.AppendLine();
-            builder.AppendLine("        legend_cycle [label=\"Red: Circular Dependencies\", color=\"red\", style=\"bold\", shape=\"box\"];");
 
+            // Break points (highest priority, show first)
+            if (breakPointEdgeCount > 0)
+            {
+                var topN = Math.Min(breakPointEdgeCount, 10);
+                builder.AppendLine($"        legend_breakpoint [label=\"Yellow: Suggested Break Points (Top {topN})\", color=\"yellow\", style=\"bold\", shape=\"box\"];");
+            }
+
+            // Cycles (show when present)
+            if (cyclicEdgeCount > 0)
+            {
+                builder.AppendLine("        legend_cycle [label=\"Red: Circular Dependencies\", color=\"red\", style=\"bold\", shape=\"box\"];");
+            }
+
+            // Cross-solution (show when present)
             if (crossSolutionCount > 0)
             {
                 builder.AppendLine("        legend_cross [label=\"Blue: Cross-Solution\", color=\"blue\", style=\"bold\", shape=\"box\"];");
             }
 
+            // Default (always show as baseline)
             builder.AppendLine("        legend_default [label=\"Black: Normal Dependencies\", color=\"black\", shape=\"box\"];");
             builder.AppendLine("    }");
 
-            _logger.LogDebug("Generated cycle dependency legend");
+            _logger.LogDebug("Generated dependency type legend");
         }
 
         // Footer

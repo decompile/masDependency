@@ -71,7 +71,7 @@ development_status:
   3-4-identify-weakest-coupling-edges-within-cycles: done
   3-5-generate-ranked-cycle-breaking-recommendations: done
   3-6-enhance-dot-visualization-with-cycle-highlighting: done
-  3-7-mark-suggested-break-points-in-yellow-on-visualizations: backlog
+  3-7-mark-suggested-break-points-in-yellow-on-visualizations: review
   epic-3-retrospective: optional
 
   epic-4: backlog
