@@ -148,6 +148,7 @@ public class Program
         // Epic 4: Extraction Scoring Services
         services.TryAddSingleton<ICouplingMetricCalculator, CouplingMetricCalculator>();
         services.TryAddSingleton<IComplexityMetricCalculator, ComplexityMetricCalculator>();
+        services.TryAddSingleton<ITechDebtAnalyzer, TechDebtAnalyzer>();
 
         // Register FilterConfiguration with validation
         services

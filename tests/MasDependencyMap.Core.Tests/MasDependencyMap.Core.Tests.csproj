@@ -31,4 +31,11 @@
     </None>
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Copy test data files to test output -->
+    <None Include="TestData\**\*.*" Link="TestData\%(RecursiveDir)%(Filename)%(Extension)">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>
