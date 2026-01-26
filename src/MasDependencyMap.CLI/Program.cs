@@ -151,6 +151,7 @@ public class Program
         services.TryAddSingleton<ITechDebtAnalyzer, TechDebtAnalyzer>();
         services.TryAddSingleton<IExternalApiDetector, ExternalApiDetector>();
         services.TryAddSingleton<IExtractionScoreCalculator, ExtractionScoreCalculator>();
+        services.TryAddSingleton<IRankedCandidateGenerator, RankedCandidateGenerator>();
 
         // Register FilterConfiguration with validation
         services
