@@ -150,6 +150,7 @@ public class Program
         services.TryAddSingleton<IComplexityMetricCalculator, ComplexityMetricCalculator>();
         services.TryAddSingleton<ITechDebtAnalyzer, TechDebtAnalyzer>();
         services.TryAddSingleton<IExternalApiDetector, ExternalApiDetector>();
+        services.TryAddSingleton<IExtractionScoreCalculator, ExtractionScoreCalculator>();
 
         // Register FilterConfiguration with validation
         services
