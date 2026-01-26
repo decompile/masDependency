@@ -42,6 +42,13 @@ public class ExternalApiDetector : IExternalApiDetector
             // Create workspace for Roslyn analysis
             workspace = MSBuildWorkspace.Create();
 
+            // Subscribe to workspace diagnostics for debugging
+            workspace.WorkspaceFailed += (sender, args) =>
+            {
+                _logger.LogWarning("Workspace diagnostic: {DiagnosticKind} - {Message}",
+                    args.Diagnostic.Kind, args.Diagnostic.Message);
+            };
+
             // Load project
             var roslynProject = await workspace.OpenProjectAsync(project.ProjectPath, cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
