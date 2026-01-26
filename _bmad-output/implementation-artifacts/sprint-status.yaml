@@ -85,8 +85,8 @@ development_status:
   4-8-display-extraction-scores-as-node-labels: done
   epic-4-retrospective: optional
 
-  epic-5: backlog
-  5-1-implement-text-report-generator-with-summary-statistics: backlog
+  epic-5: in-progress
+  5-1-implement-text-report-generator-with-summary-statistics: done
   5-2-add-cycle-detection-section-to-text-reports: backlog
   5-3-add-extraction-difficulty-scoring-section-to-text-reports: backlog
   5-4-add-cycle-breaking-recommendations-to-text-reports: backlog

@@ -4,6 +4,7 @@ using MasDependencyMap.Core.DependencyAnalysis;
 using MasDependencyMap.Core.ExtractionScoring;
 using MasDependencyMap.Core.Filtering;
 using MasDependencyMap.Core.Rendering;
+using MasDependencyMap.Core.Reporting;
 using MasDependencyMap.Core.SolutionLoading;
 using MasDependencyMap.Core.Visualization;
 using Microsoft.Build.Locator;
@@ -152,6 +153,9 @@ public class Program
         services.TryAddSingleton<IExternalApiDetector, ExternalApiDetector>();
         services.TryAddSingleton<IExtractionScoreCalculator, ExtractionScoreCalculator>();
         services.TryAddSingleton<IRankedCandidateGenerator, RankedCandidateGenerator>();
+
+        // Epic 5: Reporting Services
+        services.TryAddSingleton<ITextReportGenerator, TextReportGenerator>();
 
         // Register FilterConfiguration with validation
         services
