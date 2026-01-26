@@ -2,6 +2,7 @@ namespace MasDependencyMap.Core.Visualization;
 
 using MasDependencyMap.Core.CycleAnalysis;
 using MasDependencyMap.Core.DependencyAnalysis;
+using MasDependencyMap.Core.ExtractionScoring;
 
 /// <summary>
 /// Provides abstraction for generating Graphviz DOT format files from dependency graphs.
@@ -15,6 +16,7 @@ public interface IDotGenerator
     /// Circular dependencies are highlighted in RED when cycle information is provided.
     /// Suggested break points are highlighted in YELLOW (takes priority over cycle highlighting).
     /// Cross-solution dependencies are color-coded in BLUE for visual distinction.
+    /// When extraction scores are provided, nodes are colored green (easy 0-33), yellow (medium 34-66), or red (hard 67-100) instead of solution-based colors.
     /// </summary>
     /// <param name="graph">The dependency graph to visualize.</param>
     /// <param name="outputDirectory">Directory where the .dot file will be written.</param>
@@ -26,6 +28,9 @@ public interface IDotGenerator
     /// YELLOW takes priority over RED if edge is both cyclic and a break suggestion.</param>
     /// <param name="maxBreakPoints">Maximum number of break point edges to highlight in YELLOW (default: 10).
     /// Limits visual clutter by showing only the highest priority recommendations.</param>
+    /// <param name="extractionScores">Optional extraction difficulty scores for heat map node coloring.
+    /// When provided, nodes are colored green (easy 0-33), yellow (medium 34-66), or red (hard 67-100) instead of solution-based colors.
+    /// When null or empty, existing solution-based node coloring is used.</param>
     /// <param name="cancellationToken">Cancellation token for async operation.</param>
     /// <returns>Absolute path to the generated .dot file.</returns>
     /// <exception cref="ArgumentNullException">When graph, outputDirectory, or solutionName is null.</exception>
@@ -38,5 +43,6 @@ public interface IDotGenerator
         IReadOnlyList<CycleInfo>? cycles = null,
         IReadOnlyList<CycleBreakingSuggestion>? recommendations = null,
         int maxBreakPoints = 10,
+        IReadOnlyList<ExtractionScore>? extractionScores = null,
         CancellationToken cancellationToken = default);
 }

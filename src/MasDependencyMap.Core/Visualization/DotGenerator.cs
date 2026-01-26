@@ -4,6 +4,7 @@ using System.Text;
 using Microsoft.Extensions.Logging;
 using MasDependencyMap.Core.CycleAnalysis;
 using MasDependencyMap.Core.DependencyAnalysis;
+using MasDependencyMap.Core.ExtractionScoring;
 
 /// <summary>
 /// Generates Graphviz DOT format files from dependency graphs.
@@ -27,6 +28,7 @@ public class DotGenerator : IDotGenerator
         IReadOnlyList<CycleInfo>? cycles = null,
         IReadOnlyList<CycleBreakingSuggestion>? recommendations = null,
         int maxBreakPoints = 10,
+        IReadOnlyList<ExtractionScore>? extractionScores = null,
         CancellationToken cancellationToken = default)
     {
         // Validation
@@ -48,7 +50,7 @@ public class DotGenerator : IDotGenerator
         }
 
         // Build DOT content
-        var dotContent = BuildDotContent(graph, cycles, recommendations, maxBreakPoints, out bool isMultiSolution);
+        var dotContent = BuildDotContent(graph, cycles, recommendations, maxBreakPoints, extractionScores, out bool isMultiSolution);
 
         // Prepare output path with multi-solution naming support
         var sanitizedSolutionName = SanitizeFileName(solutionName);
@@ -154,7 +156,87 @@ public class DotGenerator : IDotGenerator
         return breakPointEdges;
     }
 
-    private string BuildDotContent(DependencyGraph graph, IReadOnlyList<CycleInfo>? cycles, IReadOnlyList<CycleBreakingSuggestion>? recommendations, int maxBreakPoints, out bool isMultiSolution)
+    /// <summary>
+    /// Builds a lookup dictionary for O(1) extraction score access by project name.
+    /// Returns null if extraction scores are not provided or empty.
+    /// </summary>
+    private Dictionary<string, ExtractionScore>? BuildExtractionScoreLookup(IReadOnlyList<ExtractionScore>? extractionScores)
+    {
+        if (extractionScores == null || extractionScores.Count == 0)
+        {
+            if (extractionScores != null && extractionScores.Count == 0)
+            {
+                _logger.LogWarning("Extraction scores provided but empty, using default node colors");
+            }
+            return null;
+        }
+
+        _logger.LogDebug("Applying heat map colors based on {ScoreCount} extraction scores", extractionScores.Count);
+
+        // Build case-insensitive dictionary for O(1) score lookup
+        // Use manual loop with TryAdd to handle duplicate project names gracefully
+        var lookup = new Dictionary<string, ExtractionScore>(extractionScores.Count, StringComparer.OrdinalIgnoreCase);
+        var duplicateCount = 0;
+
+        foreach (var score in extractionScores)
+        {
+            if (!lookup.TryAdd(score.ProjectName, score))
+            {
+                duplicateCount++;
+                _logger.LogWarning(
+                    "Duplicate project name '{ProjectName}' found in extraction scores (case-insensitive), keeping first occurrence",
+                    score.ProjectName);
+            }
+        }
+
+        if (duplicateCount > 0)
+        {
+            _logger.LogWarning(
+                "Found {DuplicateCount} duplicate project names in extraction scores, kept first occurrences",
+                duplicateCount);
+        }
+
+        return lookup;
+    }
+
+    /// <summary>
+    /// Gets extraction score for a project by name, or null if not found.
+    /// </summary>
+    private ExtractionScore? GetExtractionScore(string projectName, Dictionary<string, ExtractionScore>? scoreLookup)
+    {
+        if (scoreLookup == null)
+            return null;
+
+        if (scoreLookup.TryGetValue(projectName, out var score))
+            return score;
+
+        _logger.LogDebug("No extraction score found for project {ProjectName}, using default color", projectName);
+        return null;
+    }
+
+    /// <summary>
+    /// Determines node fill color based on extraction difficulty score.
+    /// Returns null if score is not available (fallback to solution-based color).
+    /// </summary>
+    private string? GetNodeColorForScore(double? finalScore)
+    {
+        if (finalScore == null)
+            return null;
+
+        // Heat map color mapping based on difficulty categories
+        // Easy: 0-33 (inclusive upper bound)
+        if (finalScore <= 33)
+            return "lightgreen";
+
+        // Medium: 34-66 (exclusive lower, exclusive upper)
+        if (finalScore < 67)
+            return "yellow";
+
+        // Hard: 67-100 (inclusive lower bound)
+        return "lightcoral";
+    }
+
+    private string BuildDotContent(DependencyGraph graph, IReadOnlyList<CycleInfo>? cycles, IReadOnlyList<CycleBreakingSuggestion>? recommendations, int maxBreakPoints, IReadOnlyList<ExtractionScore>? extractionScores, out bool isMultiSolution)
     {
         // Build cyclic edge set for O(1) lookup during edge generation
         var cyclicEdges = cycles != null && cycles.Count > 0
@@ -165,6 +247,10 @@ public class DotGenerator : IDotGenerator
         var breakPointEdges = recommendations != null && recommendations.Count > 0
             ? BuildBreakPointEdgeSet(recommendations, maxBreakPoints)
             : new HashSet<(string, string)>();
+
+        // Build extraction score lookup for O(1) access during node generation
+        var scoreLookup = BuildExtractionScoreLookup(extractionScores);
+        bool isHeatMapMode = scoreLookup != null;
 
         // Detect multi-solution graphs
         var uniqueSolutions = graph.Vertices
@@ -222,21 +308,64 @@ public class DotGenerator : IDotGenerator
             _logger.LogDebug("Generated legend for {SolutionCount} solutions", uniqueSolutions.Count);
         }
 
-        // Nodes with color coding based on solution
+        // Nodes with color coding (heat map mode takes precedence over solution-based colors)
+        var easyCount = 0;
+        var mediumCount = 0;
+        var hardCount = 0;
+
         foreach (var vertex in graph.Vertices)
         {
             var escapedName = EscapeDotIdentifier(vertex.ProjectName);
+            string nodeColor;
 
-            if (isMultiSolution && solutionColorMap.ContainsKey(vertex.SolutionName))
+            // Heat map mode: color by extraction difficulty score
+            if (isHeatMapMode)
             {
-                var color = solutionColorMap[vertex.SolutionName];
-                builder.AppendLine($"    {escapedName} [label={escapedName}, fillcolor=\"{color}\"];");
+                var score = GetExtractionScore(vertex.ProjectName, scoreLookup);
+                var heatMapColor = GetNodeColorForScore(score?.FinalScore);
+
+                if (heatMapColor != null)
+                {
+                    nodeColor = heatMapColor;
+
+                    // Track color distribution for logging
+                    if (heatMapColor == "lightgreen")
+                        easyCount++;
+                    else if (heatMapColor == "yellow")
+                        mediumCount++;
+                    else if (heatMapColor == "lightcoral")
+                        hardCount++;
+                }
+                else
+                {
+                    // No score found for this project - use default color
+                    nodeColor = isMultiSolution && solutionColorMap.ContainsKey(vertex.SolutionName)
+                        ? solutionColorMap[vertex.SolutionName]
+                        : "lightblue";
+                }
+            }
+            // Default mode: color by solution
+            else if (isMultiSolution && solutionColorMap.ContainsKey(vertex.SolutionName))
+            {
+                nodeColor = solutionColorMap[vertex.SolutionName];
             }
             else
             {
                 // Single solution or missing solution name - use default color
-                builder.AppendLine($"    {escapedName} [label={escapedName}, fillcolor=\"lightblue\"];");
+                nodeColor = "lightblue";
             }
+
+            builder.AppendLine($"    {escapedName} [label={escapedName}, fillcolor=\"{nodeColor}\"];");
+        }
+
+        if (isHeatMapMode)
+        {
+            _logger.LogDebug(
+                "Applied heat map colors to {NodeCount} nodes: {EasyCount} easy, {MediumCount} medium, {HardCount} hard",
+                easyCount + mediumCount + hardCount,
+                easyCount,
+                mediumCount,
+                hardCount);
         }
 
         builder.AppendLine();
@@ -328,6 +457,27 @@ public class DotGenerator : IDotGenerator
             builder.AppendLine("    }");
 
             _logger.LogDebug("Generated dependency type legend");
+        }
+
+        // Add extraction difficulty legend when heat map mode is active
+        if (isHeatMapMode)
+        {
+            builder.AppendLine();
+            builder.AppendLine("    // Legend - Extraction Difficulty");
+            builder.AppendLine("    subgraph cluster_extraction_legend {");
+            builder.AppendLine("        label=\"Extraction Difficulty\";");
+            builder.AppendLine("        style=dashed;");
+            builder.AppendLine("        color=gray;");
+            builder.AppendLine();
+            builder.AppendLine("        legend_easy [label=\"Green: Easy (0-33)\", fillcolor=\"lightgreen\", style=\"filled\", shape=\"box\"];");
+            builder.AppendLine("        legend_medium [label=\"Yellow: Medium (34-66)\", fillcolor=\"yellow\", style=\"filled\", shape=\"box\"];");
+            builder.AppendLine("        legend_hard [label=\"Red: Hard (67-100)\", fillcolor=\"lightcoral\", style=\"filled\", shape=\"box\"];");
+            builder.AppendLine();
+            builder.AppendLine("        // Invisible edges to arrange legend items horizontally");
+            builder.AppendLine("        legend_easy -> legend_medium -> legend_hard [style=invis];");
+            builder.AppendLine("    }");
+
+            _logger.LogDebug("Generated extraction difficulty legend");
         }
 
         // Footer

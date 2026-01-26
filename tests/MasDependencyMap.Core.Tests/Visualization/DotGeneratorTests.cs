@@ -3,6 +3,7 @@ namespace MasDependencyMap.Core.Tests.Visualization;
 using FluentAssertions;
 using MasDependencyMap.Core.CycleAnalysis;
 using MasDependencyMap.Core.DependencyAnalysis;
+using MasDependencyMap.Core.ExtractionScoring;
 using MasDependencyMap.Core.Visualization;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
@@ -1656,5 +1657,573 @@ public class DotGeneratorTests
         }
 
         return graph;
+    }
+
+    // ========== NEW TESTS FOR STORY 4.7: HEAT MAP VISUALIZATION ==========
+
+    [Fact]
+    public async Task GenerateAsync_WithEasyScore_AppliesLightGreenColor()
+    {
+        // Arrange
+        var graph = CreateSimpleGraph();
+        var scores = new List<ExtractionScore>
+        {
+            CreateScore("ProjectA", 25.0),  // Easy (0-33)
+            CreateScore("ProjectB", 10.0)   // Easy (0-33)
+        };
+        var outputDir = Path.Combine(Path.GetTempPath(), "dot-test-" + Guid.NewGuid());
+
+        try
+        {
+            // Act
+            var dotPath = await _generator.GenerateAsync(graph, outputDir, "TestSolution", extractionScores: scores);
+            var dotContent = await File.ReadAllTextAsync(dotPath);
+
+            // Assert
+            dotContent.Should().Contain("\"ProjectA\" [label=\"ProjectA\", fillcolor=\"lightgreen\"]");
+            dotContent.Should().Contain("\"ProjectB\" [label=\"ProjectB\", fillcolor=\"lightgreen\"]");
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(outputDir))
+                    Directory.Delete(outputDir, true);
+            }
+            catch
+            {
+                // Ignore cleanup errors
+            }
+        }
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WithMediumScore_AppliesYellowColor()
+    {
+        // Arrange
+        var graph = CreateSimpleGraph();
+        var scores = new List<ExtractionScore>
+        {
+            CreateScore("ProjectA", 50.0),  // Medium (34-66)
+            CreateScore("ProjectB", 40.0)   // Medium (34-66)
+        };
+        var outputDir = Path.Combine(Path.GetTempPath(), "dot-test-" + Guid.NewGuid());
+
+        try
+        {
+            // Act
+            var dotPath = await _generator.GenerateAsync(graph, outputDir, "TestSolution", extractionScores: scores);
+            var dotContent = await File.ReadAllTextAsync(dotPath);
+
+            // Assert
+            dotContent.Should().Contain("\"ProjectA\" [label=\"ProjectA\", fillcolor=\"yellow\"]");
+            dotContent.Should().Contain("\"ProjectB\" [label=\"ProjectB\", fillcolor=\"yellow\"]");
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(outputDir))
+                    Directory.Delete(outputDir, true);
+            }
+            catch
+            {
+                // Ignore cleanup errors
+            }
+        }
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WithHardScore_AppliesLightCoralColor()
+    {
+        // Arrange
+        var graph = CreateSimpleGraph();
+        var scores = new List<ExtractionScore>
+        {
+            CreateScore("ProjectA", 85.0),  // Hard (67-100)
+            CreateScore("ProjectB", 70.0)   // Hard (67-100)
+        };
+        var outputDir = Path.Combine(Path.GetTempPath(), "dot-test-" + Guid.NewGuid());
+
+        try
+        {
+            // Act
+            var dotPath = await _generator.GenerateAsync(graph, outputDir, "TestSolution", extractionScores: scores);
+            var dotContent = await File.ReadAllTextAsync(dotPath);
+
+            // Assert
+            dotContent.Should().Contain("\"ProjectA\" [label=\"ProjectA\", fillcolor=\"lightcoral\"]");
+            dotContent.Should().Contain("\"ProjectB\" [label=\"ProjectB\", fillcolor=\"lightcoral\"]");
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(outputDir))
+                    Directory.Delete(outputDir, true);
+            }
+            catch
+            {
+                // Ignore cleanup errors
+            }
+        }
+    }
+
+    [Theory]
+    [InlineData(0.0, "lightgreen")]      // Minimum easy
+    [InlineData(33.0, "lightgreen")]     // Maximum easy (inclusive upper bound)
+    [InlineData(33.1, "yellow")]         // Minimum medium (exclusive lower)
+    [InlineData(50.0, "yellow")]         // Mid medium
+    [InlineData(66.9, "yellow")]         // Maximum medium (exclusive upper)
+    [InlineData(67.0, "lightcoral")]     // Minimum hard (inclusive lower)
+    [InlineData(100.0, "lightcoral")]    // Maximum hard
+    public async Task GenerateAsync_WithScoreBoundaries_AppliesCorrectColor(double score, string expectedColor)
+    {
+        // Arrange
+        var graph = CreateSimpleGraph();
+        var scores = new List<ExtractionScore>
+        {
+            CreateScore("ProjectA", score)
+        };
+        var outputDir = Path.Combine(Path.GetTempPath(), "dot-test-" + Guid.NewGuid());
+
+        try
+        {
+            // Act
+            var dotPath = await _generator.GenerateAsync(graph, outputDir, "TestSolution", extractionScores: scores);
+            var dotContent = await File.ReadAllTextAsync(dotPath);
+
+            // Assert
+            dotContent.Should().Contain($"\"ProjectA\" [label=\"ProjectA\", fillcolor=\"{expectedColor}\"]");
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(outputDir))
+                    Directory.Delete(outputDir, true);
+            }
+            catch
+            {
+                // Ignore cleanup errors
+            }
+        }
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WithNullScores_UsesDefaultSolutionColors()
+    {
+        // Arrange
+        var graph = CreateSimpleGraph();
+        var outputDir = Path.Combine(Path.GetTempPath(), "dot-test-" + Guid.NewGuid());
+
+        try
+        {
+            // Act (NO extractionScores parameter)
+            var dotPath = await _generator.GenerateAsync(graph, outputDir, "TestSolution");
+            var dotContent = await File.ReadAllTextAsync(dotPath);
+
+            // Assert - Should use default single-solution color (lightblue)
+            dotContent.Should().Contain("fillcolor=\"lightblue\"");
+            dotContent.Should().NotContain("Extraction Difficulty");  // No heat map legend
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(outputDir))
+                    Directory.Delete(outputDir, true);
+            }
+            catch
+            {
+                // Ignore cleanup errors
+            }
+        }
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WithEmptyScores_UsesDefaultColors()
+    {
+        // Arrange
+        var graph = CreateSimpleGraph();
+        var scores = new List<ExtractionScore>(); // Empty list
+        var outputDir = Path.Combine(Path.GetTempPath(), "dot-test-" + Guid.NewGuid());
+
+        try
+        {
+            // Act
+            var dotPath = await _generator.GenerateAsync(graph, outputDir, "TestSolution", extractionScores: scores);
+            var dotContent = await File.ReadAllTextAsync(dotPath);
+
+            // Assert - Empty scores should be treated as null (default colors)
+            dotContent.Should().Contain("fillcolor=\"lightblue\"");
+            dotContent.Should().NotContain("Extraction Difficulty");
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(outputDir))
+                    Directory.Delete(outputDir, true);
+            }
+            catch
+            {
+                // Ignore cleanup errors
+            }
+        }
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WithMissingProjectInScores_UsesDefaultColor()
+    {
+        // Arrange
+        var graph = CreateSimpleGraph();  // ProjectA and ProjectB
+        var scores = new List<ExtractionScore>
+        {
+            CreateScore("ProjectA", 50.0)  // Only ProjectA has a score
+            // ProjectB missing from scores
+        };
+        var outputDir = Path.Combine(Path.GetTempPath(), "dot-test-" + Guid.NewGuid());
+
+        try
+        {
+            // Act
+            var dotPath = await _generator.GenerateAsync(graph, outputDir, "TestSolution", extractionScores: scores);
+            var dotContent = await File.ReadAllTextAsync(dotPath);
+
+            // Assert
+            dotContent.Should().Contain("\"ProjectA\" [label=\"ProjectA\", fillcolor=\"yellow\"]");  // Has score
+            dotContent.Should().Contain("\"ProjectB\" [label=\"ProjectB\", fillcolor=\"lightblue\"]");  // Missing score, uses default
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(outputDir))
+                    Directory.Delete(outputDir, true);
+            }
+            catch
+            {
+                // Ignore cleanup errors
+            }
+        }
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WithExtractionScores_IncludesHeatMapLegend()
+    {
+        // Arrange
+        var graph = CreateSimpleGraph();
+        var scores = new List<ExtractionScore>
+        {
+            CreateScore("ProjectA", 10.0),
+            CreateScore("ProjectB", 50.0)
+        };
+        var outputDir = Path.Combine(Path.GetTempPath(), "dot-test-" + Guid.NewGuid());
+
+        try
+        {
+            // Act
+            var dotPath = await _generator.GenerateAsync(graph, outputDir, "TestSolution", extractionScores: scores);
+            var dotContent = await File.ReadAllTextAsync(dotPath);
+
+            // Assert - Heat map legend should be present
+            dotContent.Should().Contain("cluster_extraction_legend");
+            dotContent.Should().Contain("Extraction Difficulty");
+            dotContent.Should().Contain("Green: Easy (0-33)");
+            dotContent.Should().Contain("Yellow: Medium (34-66)");
+            dotContent.Should().Contain("Red: Hard (67-100)");
+            dotContent.Should().Contain("legend_easy [label=\"Green: Easy (0-33)\", fillcolor=\"lightgreen\"");
+            dotContent.Should().Contain("legend_medium [label=\"Yellow: Medium (34-66)\", fillcolor=\"yellow\"");
+            dotContent.Should().Contain("legend_hard [label=\"Red: Hard (67-100)\", fillcolor=\"lightcoral\"");
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(outputDir))
+                    Directory.Delete(outputDir, true);
+            }
+            catch
+            {
+                // Ignore cleanup errors
+            }
+        }
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WithExtractionScoresAndCycles_PreservesCycleHighlighting()
+    {
+        // CRITICAL TEST: Validates that node colors (heat map) and edge colors (cycles) work together
+        // Arrange
+        var graph = CreateGraphWithCycle();
+        var cycles = new List<CycleInfo> { new CycleInfo(1, graph.Vertices.ToList()) };
+        var scores = new List<ExtractionScore>
+        {
+            CreateScore("ProjectA", 10.0),  // Easy
+            CreateScore("ProjectB", 50.0),  // Medium
+            CreateScore("ProjectC", 80.0)   // Hard
+        };
+        var outputDir = Path.Combine(Path.GetTempPath(), "dot-test-" + Guid.NewGuid());
+
+        try
+        {
+            // Act
+            var dotPath = await _generator.GenerateAsync(
+                graph, outputDir, "TestSolution",
+                cycles: cycles,
+                extractionScores: scores);
+            var dotContent = await File.ReadAllTextAsync(dotPath);
+
+            // Assert - Both features work together
+            // Node colors (heat map)
+            dotContent.Should().Contain("\"ProjectA\" [label=\"ProjectA\", fillcolor=\"lightgreen\"]");
+            dotContent.Should().Contain("\"ProjectB\" [label=\"ProjectB\", fillcolor=\"yellow\"]");
+            dotContent.Should().Contain("\"ProjectC\" [label=\"ProjectC\", fillcolor=\"lightcoral\"]");
+
+            // Edge colors (cycle highlighting preserved)
+            dotContent.Should().Contain("\"ProjectA\" -> \"ProjectB\" [color=\"red\", style=\"bold\"]");
+            dotContent.Should().Contain("\"ProjectB\" -> \"ProjectC\" [color=\"red\", style=\"bold\"]");
+            dotContent.Should().Contain("\"ProjectC\" -> \"ProjectA\" [color=\"red\", style=\"bold\"]");
+
+            // Both legends present
+            dotContent.Should().Contain("Extraction Difficulty");
+            dotContent.Should().Contain("Dependency Types");
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(outputDir))
+                    Directory.Delete(outputDir, true);
+            }
+            catch
+            {
+                // Ignore cleanup errors
+            }
+        }
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WithExtractionScoresAndRecommendations_PreservesBreakPointHighlighting()
+    {
+        // CRITICAL TEST: Validates that heat map doesn't interfere with yellow break point edges
+        // Arrange
+        var graph = CreateGraphWithCycle();
+        var cycles = new List<CycleInfo> { new CycleInfo(1, graph.Vertices.ToList()) };
+        var recommendations = new List<CycleBreakingSuggestion>
+        {
+            new CycleBreakingSuggestion(
+                cycleId: 1,
+                sourceProject: graph.Vertices.ElementAt(0),
+                targetProject: graph.Vertices.ElementAt(1),
+                couplingScore: 3,
+                cycleSize: 3,
+                rationale: "Weakest link")
+        };
+        var scores = new List<ExtractionScore>
+        {
+            CreateScore("ProjectA", 50.0),  // Medium - yellow NODE
+            CreateScore("ProjectB", 50.0),  // Medium - yellow NODE
+            CreateScore("ProjectC", 50.0)   // Medium - yellow NODE
+        };
+        var outputDir = Path.Combine(Path.GetTempPath(), "dot-test-" + Guid.NewGuid());
+
+        try
+        {
+            // Act
+            var dotPath = await _generator.GenerateAsync(
+                graph, outputDir, "TestSolution",
+                cycles: cycles,
+                recommendations: recommendations,
+                extractionScores: scores);
+            var dotContent = await File.ReadAllTextAsync(dotPath);
+
+            // Assert - Node colors (yellow) AND edge colors (yellow) both present but distinct
+            // Nodes: yellow fillcolor
+            dotContent.Should().Contain("\"ProjectA\" [label=\"ProjectA\", fillcolor=\"yellow\"]");
+            // Edges: yellow color attribute (break point takes priority)
+            dotContent.Should().Contain("\"ProjectA\" -> \"ProjectB\" [color=\"yellow\", style=\"bold\"]");
+
+            // Both legends present
+            dotContent.Should().Contain("Extraction Difficulty");
+            dotContent.Should().Contain("Suggested Break Points");
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(outputDir))
+                    Directory.Delete(outputDir, true);
+            }
+            catch
+            {
+                // Ignore cleanup errors
+            }
+        }
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WithMixedDifficulties_AppliesCorrectColorsToEachNode()
+    {
+        // Arrange
+        var graph = CreateGraphWithCycle();  // 3 projects
+        var scores = new List<ExtractionScore>
+        {
+            CreateScore("ProjectA", 15.0),  // Easy
+            CreateScore("ProjectB", 45.0),  // Medium
+            CreateScore("ProjectC", 75.0)   // Hard
+        };
+        var outputDir = Path.Combine(Path.GetTempPath(), "dot-test-" + Guid.NewGuid());
+
+        try
+        {
+            // Act
+            var dotPath = await _generator.GenerateAsync(graph, outputDir, "TestSolution", extractionScores: scores);
+            var dotContent = await File.ReadAllTextAsync(dotPath);
+
+            // Assert
+            dotContent.Should().Contain("\"ProjectA\" [label=\"ProjectA\", fillcolor=\"lightgreen\"]");
+            dotContent.Should().Contain("\"ProjectB\" [label=\"ProjectB\", fillcolor=\"yellow\"]");
+            dotContent.Should().Contain("\"ProjectC\" [label=\"ProjectC\", fillcolor=\"lightcoral\"]");
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(outputDir))
+                    Directory.Delete(outputDir, true);
+            }
+            catch
+            {
+                // Ignore cleanup errors
+            }
+        }
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WithDuplicateProjectNamesInScores_UsesFirstOccurrence()
+    {
+        // CRITICAL TEST: Validates graceful handling of duplicate project names (case-insensitive)
+        // Arrange
+        var graph = CreateSimpleGraph();  // ProjectA and ProjectB
+        var scores = new List<ExtractionScore>
+        {
+            CreateScore("ProjectA", 10.0),   // First occurrence - Easy (green)
+            CreateScore("projecta", 90.0),   // Duplicate (case-insensitive) - Hard (red)
+            CreateScore("ProjectB", 50.0)    // Medium (yellow)
+        };
+        var outputDir = Path.Combine(Path.GetTempPath(), "dot-test-" + Guid.NewGuid());
+
+        try
+        {
+            // Act - Should NOT throw, should log warning and use first occurrence
+            var dotPath = await _generator.GenerateAsync(graph, outputDir, "TestSolution", extractionScores: scores);
+            var dotContent = await File.ReadAllTextAsync(dotPath);
+
+            // Assert - First occurrence (10.0 = green) should be used, not duplicate (90.0 = red)
+            dotContent.Should().Contain("\"ProjectA\" [label=\"ProjectA\", fillcolor=\"lightgreen\"]",
+                "first occurrence of duplicate project name should be used");
+            dotContent.Should().NotContain("\"ProjectA\" [label=\"ProjectA\", fillcolor=\"lightcoral\"]",
+                "duplicate occurrence should be ignored");
+
+            // ProjectB should be unaffected
+            dotContent.Should().Contain("\"ProjectB\" [label=\"ProjectB\", fillcolor=\"yellow\"]");
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(outputDir))
+                    Directory.Delete(outputDir, true);
+            }
+            catch
+            {
+                // Ignore cleanup errors
+            }
+        }
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WithOrphanedScoresNotInGraph_IgnoresExtraScores()
+    {
+        // Validates that extraction scores for projects NOT in graph are silently ignored
+        // Arrange
+        var graph = CreateSimpleGraph();  // Only ProjectA and ProjectB
+        var scores = new List<ExtractionScore>
+        {
+            CreateScore("ProjectA", 10.0),      // In graph - Easy
+            CreateScore("ProjectB", 50.0),      // In graph - Medium
+            CreateScore("ProjectZ", 90.0),      // NOT in graph - should be ignored
+            CreateScore("OrphanProject", 75.0)  // NOT in graph - should be ignored
+        };
+        var outputDir = Path.Combine(Path.GetTempPath(), "dot-test-" + Guid.NewGuid());
+
+        try
+        {
+            // Act - Should complete successfully without errors
+            var dotPath = await _generator.GenerateAsync(graph, outputDir, "TestSolution", extractionScores: scores);
+            var dotContent = await File.ReadAllTextAsync(dotPath);
+
+            // Assert - Only graph projects should be colored
+            dotContent.Should().Contain("\"ProjectA\" [label=\"ProjectA\", fillcolor=\"lightgreen\"]");
+            dotContent.Should().Contain("\"ProjectB\" [label=\"ProjectB\", fillcolor=\"yellow\"]");
+
+            // Orphaned projects should not appear in output at all
+            dotContent.Should().NotContain("ProjectZ");
+            dotContent.Should().NotContain("OrphanProject");
+
+            // Heat map legend should still be present
+            dotContent.Should().Contain("Extraction Difficulty");
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(outputDir))
+                    Directory.Delete(outputDir, true);
+            }
+            catch
+            {
+                // Ignore cleanup errors
+            }
+        }
+    }
+
+    // ========== HELPER METHODS FOR HEAT MAP TESTS ==========
+
+    private ExtractionScore CreateScore(string projectName, double finalScore)
+    {
+        return new ExtractionScore(
+            ProjectName: projectName,
+            ProjectPath: $"/path/to/{projectName}.csproj",
+            FinalScore: finalScore,
+            CouplingMetric: new CouplingMetric(
+                ProjectName: projectName,
+                IncomingCount: 0,
+                OutgoingCount: 0,
+                TotalScore: 0,
+                NormalizedScore: 0),
+            ComplexityMetric: new ComplexityMetric(
+                ProjectName: projectName,
+                ProjectPath: $"/path/to/{projectName}.csproj",
+                MethodCount: 1,
+                TotalComplexity: 1,
+                AverageComplexity: 1.0,
+                NormalizedScore: 0),
+            TechDebtMetric: new TechDebtMetric(
+                ProjectName: projectName,
+                ProjectPath: $"/path/to/{projectName}.csproj",
+                TargetFramework: "net8.0",
+                NormalizedScore: 0),
+            ExternalApiMetric: new ExternalApiMetric(
+                ProjectName: projectName,
+                ProjectPath: $"/path/to/{projectName}.csproj",
+                EndpointCount: 0,
+                NormalizedScore: 0,
+                ApiTypeBreakdown: new ApiTypeBreakdown(
+                    WebApiEndpoints: 0,
+                    WebMethodEndpoints: 0,
+                    WcfEndpoints: 0)));
     }
 }
