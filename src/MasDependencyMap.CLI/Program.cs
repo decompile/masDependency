@@ -149,6 +149,7 @@ public class Program
         services.TryAddSingleton<ICouplingMetricCalculator, CouplingMetricCalculator>();
         services.TryAddSingleton<IComplexityMetricCalculator, ComplexityMetricCalculator>();
         services.TryAddSingleton<ITechDebtAnalyzer, TechDebtAnalyzer>();
+        services.TryAddSingleton<IExternalApiDetector, ExternalApiDetector>();
 
         // Register FilterConfiguration with validation
         services

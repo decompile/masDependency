@@ -78,7 +78,7 @@ development_status:
   4-1-implement-coupling-metric-calculator: done
   4-2-implement-cyclomatic-complexity-calculator-with-roslyn: done
   4-3-implement-technology-version-debt-analyzer: done
-  4-4-implement-external-api-exposure-detector: backlog
+  4-4-implement-external-api-exposure-detector: in-progress
   4-5-implement-extraction-score-calculator-with-configurable-weights: backlog
   4-6-generate-ranked-extraction-candidate-lists: backlog
   4-7-implement-heat-map-visualization-with-color-coded-scores: backlog
