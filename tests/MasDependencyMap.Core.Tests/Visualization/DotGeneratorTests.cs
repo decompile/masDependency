@@ -1680,8 +1680,8 @@ public class DotGeneratorTests
             var dotContent = await File.ReadAllTextAsync(dotPath);
 
             // Assert
-            dotContent.Should().Contain("\"ProjectA\" [label=\"ProjectA\", fillcolor=\"lightgreen\"]");
-            dotContent.Should().Contain("\"ProjectB\" [label=\"ProjectB\", fillcolor=\"lightgreen\"]");
+            dotContent.Should().Contain("\"ProjectA\" [label=\"ProjectA\", fillcolor=\"lightgreen\", fontcolor=\"black\"]");
+            dotContent.Should().Contain("\"ProjectB\" [label=\"ProjectB\", fillcolor=\"lightgreen\", fontcolor=\"black\"]");
         }
         finally
         {
@@ -1716,8 +1716,8 @@ public class DotGeneratorTests
             var dotContent = await File.ReadAllTextAsync(dotPath);
 
             // Assert
-            dotContent.Should().Contain("\"ProjectA\" [label=\"ProjectA\", fillcolor=\"yellow\"]");
-            dotContent.Should().Contain("\"ProjectB\" [label=\"ProjectB\", fillcolor=\"yellow\"]");
+            dotContent.Should().Contain("\"ProjectA\" [label=\"ProjectA\", fillcolor=\"yellow\", fontcolor=\"black\"]");
+            dotContent.Should().Contain("\"ProjectB\" [label=\"ProjectB\", fillcolor=\"yellow\", fontcolor=\"black\"]");
         }
         finally
         {
@@ -1752,8 +1752,8 @@ public class DotGeneratorTests
             var dotContent = await File.ReadAllTextAsync(dotPath);
 
             // Assert
-            dotContent.Should().Contain("\"ProjectA\" [label=\"ProjectA\", fillcolor=\"lightcoral\"]");
-            dotContent.Should().Contain("\"ProjectB\" [label=\"ProjectB\", fillcolor=\"lightcoral\"]");
+            dotContent.Should().Contain("\"ProjectA\" [label=\"ProjectA\", fillcolor=\"lightcoral\", fontcolor=\"white\"]");
+            dotContent.Should().Contain("\"ProjectB\" [label=\"ProjectB\", fillcolor=\"lightcoral\", fontcolor=\"white\"]");
         }
         finally
         {
@@ -1794,7 +1794,8 @@ public class DotGeneratorTests
             var dotContent = await File.ReadAllTextAsync(dotPath);
 
             // Assert
-            dotContent.Should().Contain($"\"ProjectA\" [label=\"ProjectA\", fillcolor=\"{expectedColor}\"]");
+            var fontColor = expectedColor == "lightcoral" ? "white" : "black";
+            dotContent.Should().Contain($"\"ProjectA\" [label=\"ProjectA\", fillcolor=\"{expectedColor}\", fontcolor=\"{fontColor}\"]");
         }
         finally
         {
@@ -1892,8 +1893,8 @@ public class DotGeneratorTests
             var dotContent = await File.ReadAllTextAsync(dotPath);
 
             // Assert
-            dotContent.Should().Contain("\"ProjectA\" [label=\"ProjectA\", fillcolor=\"yellow\"]");  // Has score
-            dotContent.Should().Contain("\"ProjectB\" [label=\"ProjectB\", fillcolor=\"lightblue\"]");  // Missing score, uses default
+            dotContent.Should().Contain("\"ProjectA\" [label=\"ProjectA\", fillcolor=\"yellow\", fontcolor=\"black\"]");  // Has score
+            dotContent.Should().Contain("\"ProjectB\" [label=\"ProjectB\", fillcolor=\"lightblue\", fontcolor=\"black\"]");  // Missing score, uses default
         }
         finally
         {
@@ -1977,9 +1978,9 @@ public class DotGeneratorTests
 
             // Assert - Both features work together
             // Node colors (heat map)
-            dotContent.Should().Contain("\"ProjectA\" [label=\"ProjectA\", fillcolor=\"lightgreen\"]");
-            dotContent.Should().Contain("\"ProjectB\" [label=\"ProjectB\", fillcolor=\"yellow\"]");
-            dotContent.Should().Contain("\"ProjectC\" [label=\"ProjectC\", fillcolor=\"lightcoral\"]");
+            dotContent.Should().Contain("\"ProjectA\" [label=\"ProjectA\", fillcolor=\"lightgreen\", fontcolor=\"black\"]");
+            dotContent.Should().Contain("\"ProjectB\" [label=\"ProjectB\", fillcolor=\"yellow\", fontcolor=\"black\"]");
+            dotContent.Should().Contain("\"ProjectC\" [label=\"ProjectC\", fillcolor=\"lightcoral\", fontcolor=\"white\"]");
 
             // Edge colors (cycle highlighting preserved)
             dotContent.Should().Contain("\"ProjectA\" -> \"ProjectB\" [color=\"red\", style=\"bold\"]");
@@ -2041,7 +2042,7 @@ public class DotGeneratorTests
 
             // Assert - Node colors (yellow) AND edge colors (yellow) both present but distinct
             // Nodes: yellow fillcolor
-            dotContent.Should().Contain("\"ProjectA\" [label=\"ProjectA\", fillcolor=\"yellow\"]");
+            dotContent.Should().Contain("\"ProjectA\" [label=\"ProjectA\", fillcolor=\"yellow\", fontcolor=\"black\"]");
             // Edges: yellow color attribute (break point takes priority)
             dotContent.Should().Contain("\"ProjectA\" -> \"ProjectB\" [color=\"yellow\", style=\"bold\"]");
 
@@ -2083,9 +2084,9 @@ public class DotGeneratorTests
             var dotContent = await File.ReadAllTextAsync(dotPath);
 
             // Assert
-            dotContent.Should().Contain("\"ProjectA\" [label=\"ProjectA\", fillcolor=\"lightgreen\"]");
-            dotContent.Should().Contain("\"ProjectB\" [label=\"ProjectB\", fillcolor=\"yellow\"]");
-            dotContent.Should().Contain("\"ProjectC\" [label=\"ProjectC\", fillcolor=\"lightcoral\"]");
+            dotContent.Should().Contain("\"ProjectA\" [label=\"ProjectA\", fillcolor=\"lightgreen\", fontcolor=\"black\"]");
+            dotContent.Should().Contain("\"ProjectB\" [label=\"ProjectB\", fillcolor=\"yellow\", fontcolor=\"black\"]");
+            dotContent.Should().Contain("\"ProjectC\" [label=\"ProjectC\", fillcolor=\"lightcoral\", fontcolor=\"white\"]");
         }
         finally
         {
@@ -2122,13 +2123,13 @@ public class DotGeneratorTests
             var dotContent = await File.ReadAllTextAsync(dotPath);
 
             // Assert - First occurrence (10.0 = green) should be used, not duplicate (90.0 = red)
-            dotContent.Should().Contain("\"ProjectA\" [label=\"ProjectA\", fillcolor=\"lightgreen\"]",
+            dotContent.Should().Contain("\"ProjectA\" [label=\"ProjectA\", fillcolor=\"lightgreen\", fontcolor=\"black\"]",
                 "first occurrence of duplicate project name should be used");
-            dotContent.Should().NotContain("\"ProjectA\" [label=\"ProjectA\", fillcolor=\"lightcoral\"]",
+            dotContent.Should().NotContain("\"ProjectA\" [label=\"ProjectA\", fillcolor=\"lightcoral\", fontcolor=\"white\"]",
                 "duplicate occurrence should be ignored");
 
             // ProjectB should be unaffected
-            dotContent.Should().Contain("\"ProjectB\" [label=\"ProjectB\", fillcolor=\"yellow\"]");
+            dotContent.Should().Contain("\"ProjectB\" [label=\"ProjectB\", fillcolor=\"yellow\", fontcolor=\"black\"]");
         }
         finally
         {
@@ -2166,8 +2167,8 @@ public class DotGeneratorTests
             var dotContent = await File.ReadAllTextAsync(dotPath);
 
             // Assert - Only graph projects should be colored
-            dotContent.Should().Contain("\"ProjectA\" [label=\"ProjectA\", fillcolor=\"lightgreen\"]");
-            dotContent.Should().Contain("\"ProjectB\" [label=\"ProjectB\", fillcolor=\"yellow\"]");
+            dotContent.Should().Contain("\"ProjectA\" [label=\"ProjectA\", fillcolor=\"lightgreen\", fontcolor=\"black\"]");
+            dotContent.Should().Contain("\"ProjectB\" [label=\"ProjectB\", fillcolor=\"yellow\", fontcolor=\"black\"]");
 
             // Orphaned projects should not appear in output at all
             dotContent.Should().NotContain("ProjectZ");
@@ -2175,6 +2176,323 @@ public class DotGeneratorTests
 
             // Heat map legend should still be present
             dotContent.Should().Contain("Extraction Difficulty");
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(outputDir))
+                    Directory.Delete(outputDir, true);
+            }
+            catch
+            {
+                // Ignore cleanup errors
+            }
+        }
+    }
+
+    // ========== NEW TESTS FOR STORY 4.8: SCORE LABELS ==========
+
+    [Fact]
+    public async Task GenerateAsync_WithScoreLabelsEnabled_IncludesScoresInLabels()
+    {
+        // Arrange
+        var graph = CreateSimpleGraph();  // ProjectA and ProjectB
+        var scores = new List<ExtractionScore>
+        {
+            CreateScore("ProjectA", 85.3),  // Should display as 85
+            CreateScore("ProjectB", 42.7)   // Should display as 43
+        };
+        var outputDir = Path.Combine(Path.GetTempPath(), "dot-test-" + Guid.NewGuid());
+
+        try
+        {
+            // Act
+            var dotPath = await _generator.GenerateAsync(
+                graph, outputDir, "TestSolution",
+                extractionScores: scores,
+                showScoreLabels: true);
+            var dotContent = await File.ReadAllTextAsync(dotPath);
+
+            // Assert
+            dotContent.Should().Contain("label=\"ProjectA\\\\nScore: 85\"");
+            dotContent.Should().Contain("label=\"ProjectB\\\\nScore: 43\"");
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(outputDir))
+                    Directory.Delete(outputDir, true);
+            }
+            catch
+            {
+                // Ignore cleanup errors
+            }
+        }
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WithScoreLabelsDisabled_ShowsProjectNamesOnly()
+    {
+        // Arrange
+        var graph = CreateSimpleGraph();
+        var scores = new List<ExtractionScore> { CreateScore("ProjectA", 85.0) };
+        var outputDir = Path.Combine(Path.GetTempPath(), "dot-test-" + Guid.NewGuid());
+
+        try
+        {
+            // Act (showScoreLabels defaults to false)
+            var dotPath = await _generator.GenerateAsync(
+                graph, outputDir, "TestSolution",
+                extractionScores: scores);
+            var dotContent = await File.ReadAllTextAsync(dotPath);
+
+            // Assert
+            dotContent.Should().Contain("label=\"ProjectA\"");
+            dotContent.Should().NotContain("Score:");
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(outputDir))
+                    Directory.Delete(outputDir, true);
+            }
+            catch
+            {
+                // Ignore cleanup errors
+            }
+        }
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WithScoreLabelsEnabledButNoScores_ShowsProjectNamesOnly()
+    {
+        // Arrange
+        var graph = CreateSimpleGraph();
+        var outputDir = Path.Combine(Path.GetTempPath(), "dot-test-" + Guid.NewGuid());
+
+        try
+        {
+            // Act (showScoreLabels=true but extractionScores=null)
+            var dotPath = await _generator.GenerateAsync(
+                graph, outputDir, "TestSolution",
+                showScoreLabels: true);
+            var dotContent = await File.ReadAllTextAsync(dotPath);
+
+            // Assert
+            dotContent.Should().Contain("label=\"ProjectA\"");
+            dotContent.Should().NotContain("Score:");
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(outputDir))
+                    Directory.Delete(outputDir, true);
+            }
+            catch
+            {
+                // Ignore cleanup errors
+            }
+        }
+    }
+
+    [Theory]
+    [InlineData(85.3, "Score: 85")]
+    [InlineData(85.5, "Score: 86")]  // Standard rounding
+    [InlineData(85.7, "Score: 86")]
+    [InlineData(0.0, "Score: 0")]
+    [InlineData(100.0, "Score: 100")]
+    [InlineData(33.4, "Score: 33")]  // Easy
+    [InlineData(33.5, "Score: 34")]  // Medium (rounding up)
+    [InlineData(66.9, "Score: 67")]  // Hard (rounding up)
+    public async Task GenerateAsync_WithScoreLabelsEnabled_RoundsScoreToInteger(
+        double score, string expectedLabel)
+    {
+        // Arrange
+        var graph = CreateSimpleGraph();
+        var scores = new List<ExtractionScore> { CreateScore("ProjectA", score) };
+        var outputDir = Path.Combine(Path.GetTempPath(), "dot-test-" + Guid.NewGuid());
+
+        try
+        {
+            // Act
+            var dotPath = await _generator.GenerateAsync(
+                graph, outputDir, "TestSolution",
+                extractionScores: scores,
+                showScoreLabels: true);
+            var dotContent = await File.ReadAllTextAsync(dotPath);
+
+            // Assert
+            dotContent.Should().Contain($"label=\"ProjectA\\\\n{expectedLabel}\"");
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(outputDir))
+                    Directory.Delete(outputDir, true);
+            }
+            catch
+            {
+                // Ignore cleanup errors
+            }
+        }
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WithScoreLabelsOnColoredBackgrounds_UsesReadableFontColors()
+    {
+        // Arrange
+        var graph = CreateGraphWithCycle();  // Three projects
+        var scores = new List<ExtractionScore>
+        {
+            CreateScore("ProjectA", 25.0),    // lightgreen background
+            CreateScore("ProjectB", 50.0),    // yellow background
+            CreateScore("ProjectC", 75.0)     // lightcoral background
+        };
+        var outputDir = Path.Combine(Path.GetTempPath(), "dot-test-" + Guid.NewGuid());
+
+        try
+        {
+            // Act
+            var dotPath = await _generator.GenerateAsync(
+                graph, outputDir, "TestSolution",
+                extractionScores: scores,
+                showScoreLabels: true);
+            var dotContent = await File.ReadAllTextAsync(dotPath);
+
+            // Assert
+            // Easy: lightgreen background → black text
+            dotContent.Should().Contain("\"ProjectA\" [label=\"ProjectA\\\\nScore: 25\", fillcolor=\"lightgreen\", fontcolor=\"black\"]");
+
+            // Medium: yellow background → black text
+            dotContent.Should().Contain("\"ProjectB\" [label=\"ProjectB\\\\nScore: 50\", fillcolor=\"yellow\", fontcolor=\"black\"]");
+
+            // Hard: lightcoral background → white text
+            dotContent.Should().Contain("\"ProjectC\" [label=\"ProjectC\\\\nScore: 75\", fillcolor=\"lightcoral\", fontcolor=\"white\"]");
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(outputDir))
+                    Directory.Delete(outputDir, true);
+            }
+            catch
+            {
+                // Ignore cleanup errors
+            }
+        }
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WithHeatMapButNoLabels_AppliesColorsOnly()
+    {
+        // Arrange
+        var graph = CreateSimpleGraph();
+        var scores = new List<ExtractionScore> { CreateScore("ProjectA", 25.0) };
+        var outputDir = Path.Combine(Path.GetTempPath(), "dot-test-" + Guid.NewGuid());
+
+        try
+        {
+            // Act (extractionScores provided, showScoreLabels=false)
+            var dotPath = await _generator.GenerateAsync(
+                graph, outputDir, "TestSolution",
+                extractionScores: scores,
+                showScoreLabels: false);
+            var dotContent = await File.ReadAllTextAsync(dotPath);
+
+            // Assert
+            dotContent.Should().Contain("fillcolor=\"lightgreen\"");
+            dotContent.Should().Contain("label=\"ProjectA\"");  // No score
+            dotContent.Should().NotContain("Score:");
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(outputDir))
+                    Directory.Delete(outputDir, true);
+            }
+            catch
+            {
+                // Ignore cleanup errors
+            }
+        }
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WithBothHeatMapAndScoreLabels_CombinesBothFeatures()
+    {
+        // Arrange
+        var graph = CreateSimpleGraph();
+        var scores = new List<ExtractionScore>
+        {
+            CreateScore("ProjectA", 25.0),  // Easy (green)
+            CreateScore("ProjectB", 75.0)   // Hard (red)
+        };
+        var outputDir = Path.Combine(Path.GetTempPath(), "dot-test-" + Guid.NewGuid());
+
+        try
+        {
+            // Act
+            var dotPath = await _generator.GenerateAsync(
+                graph, outputDir, "TestSolution",
+                extractionScores: scores,
+                showScoreLabels: true);
+            var dotContent = await File.ReadAllTextAsync(dotPath);
+
+            // Assert
+            // Heat map colors (Story 4.7)
+            dotContent.Should().Contain("fillcolor=\"lightgreen\"");
+            dotContent.Should().Contain("fillcolor=\"lightcoral\"");
+
+            // Score labels (Story 4.8)
+            dotContent.Should().Contain("Score: 25");
+            dotContent.Should().Contain("Score: 75");
+
+            // Combined
+            dotContent.Should().Contain("label=\"ProjectA\\\\nScore: 25\", fillcolor=\"lightgreen\"");
+            dotContent.Should().Contain("label=\"ProjectB\\\\nScore: 75\", fillcolor=\"lightcoral\"");
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(outputDir))
+                    Directory.Delete(outputDir, true);
+            }
+            catch
+            {
+                // Ignore cleanup errors
+            }
+        }
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WithScoreLabels_MatchesExpectedFormat()
+    {
+        // Arrange
+        var graph = CreateSimpleGraph();
+        var scores = new List<ExtractionScore> { CreateScore("ProjectA", 42.0) };
+        var outputDir = Path.Combine(Path.GetTempPath(), "dot-test-" + Guid.NewGuid());
+
+        try
+        {
+            // Act
+            var dotPath = await _generator.GenerateAsync(
+                graph, outputDir, "TestSolution",
+                extractionScores: scores,
+                showScoreLabels: true);
+            var dotContent = await File.ReadAllTextAsync(dotPath);
+
+            // Assert
+            // Validate label format: "ProjectName\nScore: XX"
+            var labelPattern = @"\[label=""ProjectA\\\\nScore: \d+"", fillcolor";
+            dotContent.Should().MatchRegex(labelPattern);
         }
         finally
         {

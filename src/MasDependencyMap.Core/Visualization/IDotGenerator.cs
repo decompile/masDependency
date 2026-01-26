@@ -31,6 +31,8 @@ public interface IDotGenerator
     /// <param name="extractionScores">Optional extraction difficulty scores for heat map node coloring.
     /// When provided, nodes are colored green (easy 0-33), yellow (medium 34-66), or red (hard 67-100) instead of solution-based colors.
     /// When null or empty, existing solution-based node coloring is used.</param>
+    /// <param name="showScoreLabels">When true and extractionScores are provided, node labels include extraction scores in format "ProjectName\nScore: XX".
+    /// When false, labels show project names only (default behavior). Requires extractionScores to be non-null and non-empty to display scores.</param>
     /// <param name="cancellationToken">Cancellation token for async operation.</param>
     /// <returns>Absolute path to the generated .dot file.</returns>
     /// <exception cref="ArgumentNullException">When graph, outputDirectory, or solutionName is null.</exception>
@@ -44,5 +46,6 @@ public interface IDotGenerator
         IReadOnlyList<CycleBreakingSuggestion>? recommendations = null,
         int maxBreakPoints = 10,
         IReadOnlyList<ExtractionScore>? extractionScores = null,
+        bool showScoreLabels = false,
         CancellationToken cancellationToken = default);
 }

@@ -82,7 +82,7 @@ development_status:
   4-5-implement-extraction-score-calculator-with-configurable-weights: done
   4-6-generate-ranked-extraction-candidate-lists: done
   4-7-implement-heat-map-visualization-with-color-coded-scores: done
-  4-8-display-extraction-scores-as-node-labels: backlog
+  4-8-display-extraction-scores-as-node-labels: done
   epic-4-retrospective: optional
 
   epic-5: backlog

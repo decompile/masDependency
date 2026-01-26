@@ -29,6 +29,7 @@ public class DotGenerator : IDotGenerator
         IReadOnlyList<CycleBreakingSuggestion>? recommendations = null,
         int maxBreakPoints = 10,
         IReadOnlyList<ExtractionScore>? extractionScores = null,
+        bool showScoreLabels = false,
         CancellationToken cancellationToken = default)
     {
         // Validation
@@ -50,7 +51,7 @@ public class DotGenerator : IDotGenerator
         }
 
         // Build DOT content
-        var dotContent = BuildDotContent(graph, cycles, recommendations, maxBreakPoints, extractionScores, out bool isMultiSolution);
+        var dotContent = BuildDotContent(graph, cycles, recommendations, maxBreakPoints, extractionScores, showScoreLabels, out bool isMultiSolution);
 
         // Prepare output path with multi-solution naming support
         var sanitizedSolutionName = SanitizeFileName(solutionName);
@@ -236,7 +237,39 @@ public class DotGenerator : IDotGenerator
         return "lightcoral";
     }
 
-    private string BuildDotContent(DependencyGraph graph, IReadOnlyList<CycleInfo>? cycles, IReadOnlyList<CycleBreakingSuggestion>? recommendations, int maxBreakPoints, IReadOnlyList<ExtractionScore>? extractionScores, out bool isMultiSolution)
+    /// <summary>
+    /// Formats node label with optional extraction score.
+    /// Returns multi-line label "ProjectName\nScore: XX" when showScore is true and score is available.
+    /// Returns project name only when showScore is false or score is unavailable.
+    /// </summary>
+    private string FormatNodeLabel(string projectName, double? finalScore, bool showScore)
+    {
+        if (!showScore || finalScore == null)
+            return projectName;
+
+        // Round to nearest integer (no decimal places)
+        int scoreInt = (int)Math.Round(finalScore.Value);
+
+        // Multi-line format: "ProjectName\nScore: XX"
+        // Use \n escape sequence for centered newline in DOT format
+        return $"{projectName}\\nScore: {scoreInt}";
+    }
+
+    /// <summary>
+    /// Determines appropriate font color for readability based on background color.
+    /// Returns "white" for dark backgrounds (lightcoral), "black" for light backgrounds (lightgreen, yellow, etc.).
+    /// </summary>
+    private string GetFontColorForBackground(string backgroundColor)
+    {
+        // Only lightcoral needs white text (medium-dark background)
+        if (backgroundColor == "lightcoral")
+            return "white";
+
+        // All other colors (lightgreen, yellow, lightblue, etc.) use black
+        return "black";
+    }
+
+    private string BuildDotContent(DependencyGraph graph, IReadOnlyList<CycleInfo>? cycles, IReadOnlyList<CycleBreakingSuggestion>? recommendations, int maxBreakPoints, IReadOnlyList<ExtractionScore>? extractionScores, bool showScoreLabels, out bool isMultiSolution)
     {
         // Build cyclic edge set for O(1) lookup during edge generation
         var cyclicEdges = cycles != null && cycles.Count > 0
@@ -308,20 +341,28 @@ public class DotGenerator : IDotGenerator
             _logger.LogDebug("Generated legend for {SolutionCount} solutions", uniqueSolutions.Count);
         }
 
+        // Handle edge case: showScoreLabels=true but no scores provided
+        if (showScoreLabels && scoreLookup == null)
+        {
+            _logger.LogWarning("Score labels requested but no extraction scores provided, showing project names only");
+        }
+
         // Nodes with color coding (heat map mode takes precedence over solution-based colors)
         var easyCount = 0;
         var mediumCount = 0;
         var hardCount = 0;
+        var labeledNodeCount = 0;
 
         foreach (var vertex in graph.Vertices)
         {
             var escapedName = EscapeDotIdentifier(vertex.ProjectName);
             string nodeColor;
+            ExtractionScore? score = null;
 
             // Heat map mode: color by extraction difficulty score
             if (isHeatMapMode)
             {
-                var score = GetExtractionScore(vertex.ProjectName, scoreLookup);
+                score = GetExtractionScore(vertex.ProjectName, scoreLookup);
                 var heatMapColor = GetNodeColorForScore(score?.FinalScore);
 
                 if (heatMapColor != null)
@@ -355,7 +396,19 @@ public class DotGenerator : IDotGenerator
                 nodeColor = "lightblue";
             }
 
-            builder.AppendLine($"    {escapedName} [label={escapedName}, fillcolor=\"{nodeColor}\"];");
+            // Format label with score if requested (and score is available)
+            string labelText = FormatNodeLabel(vertex.ProjectName, score?.FinalScore, showScoreLabels);
+            string escapedLabel = EscapeDotIdentifier(labelText);
+
+            // Get appropriate font color for readability
+            string fontColor = GetFontColorForBackground(nodeColor);
+
+            // Generate node with label, background color, and font color
+            builder.AppendLine($"    {escapedName} [label={escapedLabel}, fillcolor=\"{nodeColor}\", fontcolor=\"{fontColor}\"];");
+
+            // Track labeled nodes for logging
+            if (showScoreLabels && score?.FinalScore != null)
+                labeledNodeCount++;
         }
 
         if (isHeatMapMode)
@@ -366,6 +419,14 @@ public class DotGenerator : IDotGenerator
                 easyCount,
                 mediumCount,
                 hardCount);
+        }
+
+        if (showScoreLabels && scoreLookup != null)
+        {
+            _logger.LogDebug(
+                "Applied score labels to {LabeledNodeCount} of {TotalNodeCount} nodes",
+                labeledNodeCount,
+                graph.VertexCount);
         }
 
         builder.AppendLine();

@@ -24,7 +24,9 @@
       "Bash(findstr:*)",
       "WebFetch(domain:github.com)",
       "Bash(cd:*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(dotnet clean:*)",
+      "WebFetch(domain:graphviz.org)"
     ]
   }
 }
