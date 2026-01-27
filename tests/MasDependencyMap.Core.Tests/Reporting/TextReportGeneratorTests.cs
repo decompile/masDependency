@@ -1511,4 +1511,438 @@ public class TextReportGeneratorTests : IDisposable
 
         return scores;
     }
+
+    // ================================================================================
+    // Story 5.4: Cycle-Breaking Recommendations Section Tests
+    // ================================================================================
+
+    [Fact]
+    public async Task GenerateAsync_WithRecommendations_IncludesRecommendationsSection()
+    {
+        // Arrange
+        var graph = CreateTestGraph(projectCount: 20);
+        var recommendations = CreateTestRecommendations(count: 10);
+        var outputDir = CreateTempDirectory();
+
+        // Act
+        var reportPath = await _generator.GenerateAsync(
+            graph, outputDir, "TestSolution", recommendations: recommendations);
+
+        // Assert
+        var content = await File.ReadAllTextAsync(reportPath);
+        content.Should().Contain("CYCLE-BREAKING RECOMMENDATIONS");
+        content.Should().Contain("Top 5 prioritized actions to reduce circular dependencies");
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WithRecommendations_ShowsTop5Only()
+    {
+        // Arrange
+        var graph = CreateTestGraph(projectCount: 20);
+        var recommendations = CreateTestRecommendations(count: 15);  // 15 recommendations
+        var outputDir = CreateTempDirectory();
+
+        // Act
+        var reportPath = await _generator.GenerateAsync(
+            graph, outputDir, "TestSolution", recommendations: recommendations);
+
+        // Assert
+        var content = await File.ReadAllTextAsync(reportPath);
+
+        // Verify only top 5 shown (ranks 1-5)
+        content.Should().Contain(" 1. Break:");
+        content.Should().Contain(" 5. Break:");
+
+        // Verify rank 6 NOT shown
+        content.Should().NotContain(" 6. Break:");
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WithRecommendations_FormatsCorrectly()
+    {
+        // Arrange
+        var graph = CreateTestGraph(projectCount: 10);
+        var sourceProject = new ProjectNode
+        {
+            ProjectName = "PaymentService",
+            ProjectPath = "C:\\projects\\PaymentService.csproj",
+            SolutionName = "Solution1",
+            TargetFramework = "net8.0"
+        };
+        var targetProject = new ProjectNode
+        {
+            ProjectName = "OrderManagement",
+            ProjectPath = "C:\\projects\\OrderManagement.csproj",
+            SolutionName = "Solution1",
+            TargetFramework = "net8.0"
+        };
+        var recommendations = new List<CycleBreakingSuggestion>
+        {
+            new CycleBreakingSuggestion(
+                cycleId: 1,
+                sourceProject: sourceProject,
+                targetProject: targetProject,
+                couplingScore: 3,
+                cycleSize: 5,
+                rationale: "Weakest link in 5-project cycle") with { Rank = 1 }
+        };
+        var outputDir = CreateTempDirectory();
+
+        // Act
+        var reportPath = await _generator.GenerateAsync(
+            graph, outputDir, "TestSolution", recommendations: recommendations);
+
+        // Assert
+        var content = await File.ReadAllTextAsync(reportPath);
+        content.Should().Contain(" 1. Break: PaymentService → OrderManagement (Coupling: 3 calls) - Weakest link in 5-project cycle");
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WithNullRecommendations_DoesNotIncludeSection()
+    {
+        // Arrange
+        var graph = CreateTestGraph(projectCount: 10);
+        var outputDir = CreateTempDirectory();
+
+        // Act
+        var reportPath = await _generator.GenerateAsync(
+            graph, outputDir, "TestSolution", recommendations: null);
+
+        // Assert
+        var content = await File.ReadAllTextAsync(reportPath);
+        content.Should().NotContain("CYCLE-BREAKING RECOMMENDATIONS");
+
+        // Should still have Stories 5.1/5.2/5.3 sections
+        content.Should().Contain("DEPENDENCY OVERVIEW");
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WithEmptyRecommendations_DoesNotIncludeSection()
+    {
+        // Arrange
+        var graph = CreateTestGraph(projectCount: 10);
+        var recommendations = new List<CycleBreakingSuggestion>();  // Empty list
+        var outputDir = CreateTempDirectory();
+
+        // Act
+        var reportPath = await _generator.GenerateAsync(
+            graph, outputDir, "TestSolution", recommendations: recommendations);
+
+        // Assert
+        var content = await File.ReadAllTextAsync(reportPath);
+        content.Should().NotContain("CYCLE-BREAKING RECOMMENDATIONS");
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WithFewerThan5Recommendations_ShowsAllAvailable()
+    {
+        // Arrange
+        var graph = CreateTestGraph(projectCount: 10);
+        var recommendations = CreateTestRecommendations(count: 3);  // Only 3 recommendations
+        var outputDir = CreateTempDirectory();
+
+        // Act
+        var reportPath = await _generator.GenerateAsync(
+            graph, outputDir, "TestSolution", recommendations: recommendations);
+
+        // Assert
+        var content = await File.ReadAllTextAsync(reportPath);
+
+        // Verify all 3 recommendations shown
+        content.Should().Contain(" 1. Break:");
+        content.Should().Contain(" 3. Break:");
+
+        // Should not have rank 4 or higher
+        content.Should().NotContain(" 4. Break:");
+    }
+
+    [Fact]
+    public async Task GenerateAsync_RecommendationsSection_AppearsAfterExtractionScores()
+    {
+        // Arrange
+        var graph = CreateTestGraph(projectCount: 20);
+        var scores = CreateTestExtractionScores(count: 20);
+        var recommendations = CreateTestRecommendations(count: 10);
+        var outputDir = CreateTempDirectory();
+
+        // Act
+        var reportPath = await _generator.GenerateAsync(
+            graph, outputDir, "TestSolution", extractionScores: scores, recommendations: recommendations);
+
+        // Assert
+        var content = await File.ReadAllTextAsync(reportPath);
+
+        var extractionScoresIndex = content.IndexOf("EXTRACTION DIFFICULTY SCORES");
+        var recommendationsIndex = content.IndexOf("CYCLE-BREAKING RECOMMENDATIONS");
+
+        extractionScoresIndex.Should().BeGreaterThan(0, "Extraction Scores should exist");
+        recommendationsIndex.Should().BeGreaterThan(extractionScoresIndex,
+            "Recommendations should appear after Extraction Scores");
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WithSingleCoupling_FormatsAsSingleCall()
+    {
+        // Arrange
+        var graph = CreateTestGraph(projectCount: 5);
+        var sourceProject = new ProjectNode
+        {
+            ProjectName = "ServiceA",
+            ProjectPath = "C:\\projects\\ServiceA.csproj",
+            SolutionName = "Solution1",
+            TargetFramework = "net8.0"
+        };
+        var targetProject = new ProjectNode
+        {
+            ProjectName = "ServiceB",
+            ProjectPath = "C:\\projects\\ServiceB.csproj",
+            SolutionName = "Solution1",
+            TargetFramework = "net8.0"
+        };
+        var recommendations = new List<CycleBreakingSuggestion>
+        {
+            new CycleBreakingSuggestion(
+                cycleId: 1,
+                sourceProject: sourceProject,
+                targetProject: targetProject,
+                couplingScore: 1,  // Single call
+                cycleSize: 3,
+                rationale: "Weakest link in small 3-project cycle, only 1 method call") with { Rank = 1 }
+        };
+        var outputDir = CreateTempDirectory();
+
+        // Act
+        var reportPath = await _generator.GenerateAsync(
+            graph, outputDir, "TestSolution", recommendations: recommendations);
+
+        // Assert
+        var content = await File.ReadAllTextAsync(reportPath);
+        content.Should().Contain("(Coupling: 1 call)");  // Singular, not "1 calls"
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WithMultipleCouplings_FormatsAsPlural()
+    {
+        // Arrange
+        var graph = CreateTestGraph(projectCount: 5);
+        var sourceProject = new ProjectNode
+        {
+            ProjectName = "ServiceA",
+            ProjectPath = "C:\\projects\\ServiceA.csproj",
+            SolutionName = "Solution1",
+            TargetFramework = "net8.0"
+        };
+        var targetProject = new ProjectNode
+        {
+            ProjectName = "ServiceB",
+            ProjectPath = "C:\\projects\\ServiceB.csproj",
+            SolutionName = "Solution1",
+            TargetFramework = "net8.0"
+        };
+        var recommendations = new List<CycleBreakingSuggestion>
+        {
+            new CycleBreakingSuggestion(
+                cycleId: 1,
+                sourceProject: sourceProject,
+                targetProject: targetProject,
+                couplingScore: 5,  // Multiple calls
+                cycleSize: 4,
+                rationale: "Weakest link in 4-project cycle, only 5 method calls") with { Rank = 1 }
+        };
+        var outputDir = CreateTempDirectory();
+
+        // Act
+        var reportPath = await _generator.GenerateAsync(
+            graph, outputDir, "TestSolution", recommendations: recommendations);
+
+        // Assert
+        var content = await File.ReadAllTextAsync(reportPath);
+        content.Should().Contain("(Coupling: 5 calls)");  // Plural
+    }
+
+    [Fact]
+    public async Task GenerateAsync_RecommendationsSection_UsesCorrectSeparators()
+    {
+        // Arrange
+        var graph = CreateTestGraph(projectCount: 20);
+        var recommendations = CreateTestRecommendations(count: 10);
+        var outputDir = CreateTempDirectory();
+
+        // Act
+        var reportPath = await _generator.GenerateAsync(
+            graph, outputDir, "TestSolution", recommendations: recommendations);
+
+        // Assert
+        var content = await File.ReadAllTextAsync(reportPath);
+
+        // Verify section separators (80 '=' characters)
+        var separator = new string('=', 80);
+        content.Should().Contain(separator);
+
+        // Verify section header
+        content.Should().Contain("CYCLE-BREAKING RECOMMENDATIONS");
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WithNullItemInRecommendations_ThrowsArgumentException()
+    {
+        // Code review fix: Validate null items in list don't cause crashes
+        // Arrange
+        var graph = CreateTestGraph(projectCount: 5);
+        var recommendations = new List<CycleBreakingSuggestion>
+        {
+            CreateTestRecommendations(count: 1)[0],
+            null!,  // Null item in the list
+            CreateTestRecommendations(count: 1)[0]
+        };
+        var outputDir = CreateTempDirectory();
+
+        // Act & Assert
+        var exception = await Assert.ThrowsAsync<ArgumentException>(
+            () => _generator.GenerateAsync(graph, outputDir, "TestSolution", recommendations: recommendations));
+
+        exception.ParamName.Should().Be("recommendations");
+        exception.Message.Should().Contain("contains null items");
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WithRealRecommendationGenerator_ProducesCorrectReport()
+    {
+        // Integration test: Use real RecommendationGenerator from Epic 3
+        // Code review fix: Verify report works with actual Epic 3 components, not just test helpers
+        // Arrange
+        var graph = CreateTestGraph(projectCount: 10);
+
+        // Create test projects for cycle
+        var projectA = new ProjectNode
+        {
+            ProjectName = "ProjectA",
+            ProjectPath = "C:\\projects\\ProjectA.csproj",
+            SolutionName = "Solution1",
+            TargetFramework = "net8.0"
+        };
+        var projectB = new ProjectNode
+        {
+            ProjectName = "ProjectB",
+            ProjectPath = "C:\\projects\\ProjectB.csproj",
+            SolutionName = "Solution1",
+            TargetFramework = "net8.0"
+        };
+        var projectC = new ProjectNode
+        {
+            ProjectName = "ProjectC",
+            ProjectPath = "C:\\projects\\ProjectC.csproj",
+            SolutionName = "Solution1",
+            TargetFramework = "net8.0"
+        };
+
+        // Create edges with coupling scores (simulating Story 3.3 coupling analysis)
+        var edgeAB = new DependencyEdge
+        {
+            Source = projectA,
+            Target = projectB,
+            DependencyType = DependencyType.ProjectReference,
+            CouplingScore = 5
+        };
+        var edgeBC = new DependencyEdge
+        {
+            Source = projectB,
+            Target = projectC,
+            DependencyType = DependencyType.ProjectReference,
+            CouplingScore = 3  // Weakest coupling
+        };
+        var edgeCA = new DependencyEdge
+        {
+            Source = projectC,
+            Target = projectA,
+            DependencyType = DependencyType.ProjectReference,
+            CouplingScore = 8
+        };
+
+        // Create cycle with weak edges populated (simulating Story 3.4 weak edge identification)
+        var cycle = new CycleInfo(1, new List<ProjectNode> { projectA, projectB, projectC })
+        {
+            WeakCouplingEdges = new List<DependencyEdge> { edgeBC }  // Only weakest edge
+        };
+
+        var cycles = new List<CycleInfo> { cycle };
+
+        // Use real Epic 3 RecommendationGenerator
+        var recommendationGenerator = new RecommendationGenerator(
+            NullLogger<RecommendationGenerator>.Instance);
+
+        // Generate recommendations using real Epic 3 component
+        var recommendations = await recommendationGenerator.GenerateRecommendationsAsync(cycles);
+
+        var outputDir = CreateTempDirectory();
+
+        // Act
+        var reportPath = await _generator.GenerateAsync(
+            graph, outputDir, "TestSolution", cycles: cycles, recommendations: recommendations);
+
+        // Assert
+        var content = await File.ReadAllTextAsync(reportPath);
+
+        // Verify recommendations were generated by real Epic 3 component
+        recommendations.Should().NotBeEmpty("real RecommendationGenerator should produce recommendations");
+        recommendations.Should().HaveCount(1, "should have 1 recommendation for 1 weak edge");
+
+        // Verify report contains recommendations section
+        content.Should().Contain("CYCLE-BREAKING RECOMMENDATIONS");
+        content.Should().Contain("Top 5 prioritized actions to reduce circular dependencies");
+
+        // Verify weakest edge (ProjectB -> ProjectC with coupling 3) is in the report
+        content.Should().Contain("ProjectB");
+        content.Should().Contain("ProjectC");
+
+        // Verify format with arrow symbol
+        content.Should().Contain("→");
+
+        // Verify coupling score appears correctly
+        content.Should().Contain("(Coupling: 3 calls)");
+
+        // Verify rationale generated by real Epic 3 RecommendationGenerator
+        content.Should().Contain("Weakest link");
+        content.Should().Contain("3-project cycle");
+    }
+
+    // Helper: Create test recommendations with configurable count
+    private IReadOnlyList<CycleBreakingSuggestion> CreateTestRecommendations(int count = 10)
+    {
+        var recommendations = new List<CycleBreakingSuggestion>();
+        var random = new Random(42);  // Fixed seed for reproducible tests
+
+        for (int i = 0; i < count; i++)
+        {
+            var sourceProject = new ProjectNode
+            {
+                ProjectName = $"SourceProject{i}",
+                ProjectPath = $"C:\\projects\\SourceProject{i}.csproj",
+                SolutionName = "Solution1",
+                TargetFramework = "net8.0"
+            };
+            var targetProject = new ProjectNode
+            {
+                ProjectName = $"TargetProject{i}",
+                ProjectPath = $"C:\\projects\\TargetProject{i}.csproj",
+                SolutionName = "Solution1",
+                TargetFramework = "net8.0"
+            };
+            var couplingScore = i + 1;  // Sequential coupling scores (1, 2, 3, ...)
+            var cycleSize = random.Next(3, 12);  // Random cycle size 3-12
+
+            var recommendation = new CycleBreakingSuggestion(
+                cycleId: i,
+                sourceProject: sourceProject,
+                targetProject: targetProject,
+                couplingScore: couplingScore,
+                cycleSize: cycleSize,
+                rationale: $"Weakest link in {cycleSize}-project cycle, only {couplingScore} method calls");
+
+            // Set rank (1-based)
+            recommendations.Add(recommendation with { Rank = i + 1 });
+        }
+
+        return recommendations;
+    }
 }

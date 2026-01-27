@@ -83,8 +83,18 @@ public sealed class TextReportGenerator : ITextReportGenerator
             AppendExtractionScores(report, extractionScores);
         }
 
-        // Future stories will add more sections here
-        // Story 5.4: AppendRecommendations(report, recommendations);
+        // Story 5.4: Cycle-breaking recommendations section
+        if (recommendations != null && recommendations.Count > 0)
+        {
+            // Validate no null items in the list (defensive programming)
+            if (recommendations.Any(r => r == null))
+            {
+                throw new ArgumentException("Recommendations list contains null items", nameof(recommendations));
+            }
+            // Note: Epic 3's CycleBreakingSuggestion constructor already validates SourceProject/TargetProject are not null
+
+            AppendRecommendations(report, recommendations);
+        }
 
         // Write to file (sanitize solution name to prevent path traversal)
         var sanitizedName = SanitizeFileName(solutionName);
@@ -436,5 +446,56 @@ public sealed class TextReportGenerator : ITextReportGenerator
             !string.IsNullOrEmpty(e.Source.SolutionName) &&
             !string.IsNullOrEmpty(e.Target.SolutionName) &&
             !e.Source.SolutionName.Equals(e.Target.SolutionName, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// Appends the cycle-breaking recommendations section showing prioritized actions to reduce circular dependencies.
+    /// Displays top 5 recommendations with source project, target project, coupling score, and rationale.
+    /// </summary>
+    /// <param name="report">The StringBuilder to append to.</param>
+    /// <param name="recommendations">The list of cycle-breaking recommendations ranked by priority.</param>
+    private void AppendRecommendations(StringBuilder report, IReadOnlyList<CycleBreakingSuggestion> recommendations)
+    {
+        report.AppendLine("CYCLE-BREAKING RECOMMENDATIONS");
+        report.AppendLine(new string('=', ReportWidth));
+        report.AppendLine();
+
+        _logger.LogDebug(
+            "Appending cycle-breaking recommendations section: {TotalRecommendations} recommendations, showing top {ShowCount}",
+            recommendations.Count,
+            Math.Min(5, recommendations.Count));
+
+        report.AppendLine("Top 5 prioritized actions to reduce circular dependencies:");
+        report.AppendLine();
+
+        // Take top 5 recommendations (already sorted by Rank from Epic 3 RecommendationGenerator)
+        var topRecommendations = recommendations.Take(5).ToList();
+
+        for (int i = 0; i < topRecommendations.Count; i++)
+        {
+            var recommendation = topRecommendations[i];
+            var rank = recommendation.Rank;
+            var sourceProject = recommendation.SourceProject.ProjectName;
+            var targetProject = recommendation.TargetProject.ProjectName;
+            var couplingText = FormatCouplingCalls(recommendation.CouplingScore);
+            var rationale = recommendation.Rationale;
+
+            report.AppendLine($" {rank}. Break: {sourceProject} → {targetProject} (Coupling: {couplingText}) - {rationale}");
+        }
+
+        // Section closing
+        report.AppendLine();
+        report.AppendLine(new string('=', ReportWidth));
+        report.AppendLine();
+    }
+
+    /// <summary>
+    /// Formats coupling score with grammatical correctness.
+    /// </summary>
+    /// <param name="couplingScore">The number of method calls between projects.</param>
+    /// <returns>Formatted string: "1 call" or "N calls".</returns>
+    private static string FormatCouplingCalls(int couplingScore)
+    {
+        return couplingScore == 1 ? "1 call" : $"{couplingScore} calls";
     }
 }
