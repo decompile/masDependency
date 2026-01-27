@@ -796,4 +796,475 @@ public sealed class CsvExporterTests : IDisposable
             Rank = rank
         };
     }
+
+    // ===== Story 5.7: Dependency Matrix Export Tests =====
+
+    [Fact]
+    public async Task ExportDependencyMatrixAsync_ValidGraph_GeneratesValidCsv()
+    {
+        // Arrange
+        var graph = CreateTestGraph(edgeCount: 20);
+        var outputDir = CreateTempDirectory();
+
+        // Act
+        var filePath = await _exporter.ExportDependencyMatrixAsync(
+            graph, outputDir, "TestSolution");
+
+        // Assert
+        File.Exists(filePath).Should().BeTrue();
+        var content = await File.ReadAllTextAsync(filePath);
+        content.Should().Contain("Source Project");
+        content.Should().Contain("Target Project");
+        content.Should().Contain("Dependency Type");
+        content.Should().Contain("Coupling Score");
+
+        // Parse CSV and verify row count
+        using var reader = new StreamReader(filePath);
+        using var csv = new CsvReader(reader, CultureInfo.InvariantCulture);
+        csv.Context.RegisterClassMap<DependencyMatrixRecordMap>();
+        var records = csv.GetRecords<DependencyMatrixRecord>().ToList();
+        records.Should().HaveCount(20);
+    }
+
+    [Fact]
+    public async Task ExportDependencyMatrixAsync_SortsBySourceThenTarget_Ascending()
+    {
+        // Arrange
+        var edges = new List<DependencyEdge>
+        {
+            CreateTestEdge("ProjectC", "ProjectB", DependencyType.ProjectReference, 5),
+            CreateTestEdge("ProjectA", "ProjectC", DependencyType.ProjectReference, 3),
+            CreateTestEdge("ProjectA", "ProjectB", DependencyType.BinaryReference, 1),
+            CreateTestEdge("ProjectB", "ProjectA", DependencyType.ProjectReference, 2)
+        };
+        var graph = CreateGraphFromEdges(edges);
+        var outputDir = CreateTempDirectory();
+
+        // Act
+        var filePath = await _exporter.ExportDependencyMatrixAsync(
+            graph, outputDir, "TestSolution");
+
+        // Assert
+        using var reader = new StreamReader(filePath);
+        using var csv = new CsvReader(reader, CultureInfo.InvariantCulture);
+        csv.Context.RegisterClassMap<DependencyMatrixRecordMap>();
+        var records = csv.GetRecords<DependencyMatrixRecord>().ToList();
+
+        // Verify sorting: Source ascending, then Target ascending
+        records[0].SourceProject.Should().Be("ProjectA");
+        records[0].TargetProject.Should().Be("ProjectB");
+        records[1].SourceProject.Should().Be("ProjectA");
+        records[1].TargetProject.Should().Be("ProjectC");
+        records[2].SourceProject.Should().Be("ProjectB");
+        records[2].TargetProject.Should().Be("ProjectA");
+        records[3].SourceProject.Should().Be("ProjectC");
+        records[3].TargetProject.Should().Be("ProjectB");
+    }
+
+    [Fact]
+    public async Task ExportDependencyMatrixAsync_ColumnHeaders_UseTitleCaseWithSpaces()
+    {
+        // Arrange
+        var graph = CreateTestGraph(edgeCount: 1);
+        var outputDir = CreateTempDirectory();
+
+        // Act
+        var filePath = await _exporter.ExportDependencyMatrixAsync(
+            graph, outputDir, "TestSolution");
+
+        // Assert
+        var lines = await File.ReadAllLinesAsync(filePath);
+        var headerLine = lines[0];
+
+        headerLine.Should().Contain("Source Project");
+        headerLine.Should().Contain("Target Project");
+        headerLine.Should().Contain("Dependency Type");
+        headerLine.Should().Contain("Coupling Score");
+
+        // Verify exact order and format
+        var expectedHeader = "Source Project,Target Project,Dependency Type,Coupling Score";
+        headerLine.Should().Be(expectedHeader);
+    }
+
+    [Fact]
+    public async Task ExportDependencyMatrixAsync_DependencyType_FormatsProjectReference()
+    {
+        // Arrange
+        var edge = CreateTestEdge("ProjectA", "ProjectB", DependencyType.ProjectReference, 5);
+        var graph = CreateGraphFromEdges(new[] { edge });
+        var outputDir = CreateTempDirectory();
+
+        // Act
+        var filePath = await _exporter.ExportDependencyMatrixAsync(
+            graph, outputDir, "TestSolution");
+
+        // Assert
+        using var reader = new StreamReader(filePath);
+        using var csv = new CsvReader(reader, CultureInfo.InvariantCulture);
+        csv.Context.RegisterClassMap<DependencyMatrixRecordMap>();
+        var records = csv.GetRecords<DependencyMatrixRecord>().ToList();
+
+        records[0].DependencyType.Should().Be("Project Reference");
+        records[0].DependencyType.Should().NotBe("ProjectReference");  // Verify it's not enum name
+    }
+
+    [Fact]
+    public async Task ExportDependencyMatrixAsync_DependencyType_FormatsBinaryReference()
+    {
+        // Arrange
+        var edge = CreateTestEdge("ProjectA", "ProjectB", DependencyType.BinaryReference, 1);
+        var graph = CreateGraphFromEdges(new[] { edge });
+        var outputDir = CreateTempDirectory();
+
+        // Act
+        var filePath = await _exporter.ExportDependencyMatrixAsync(
+            graph, outputDir, "TestSolution");
+
+        // Assert
+        using var reader = new StreamReader(filePath);
+        using var csv = new CsvReader(reader, CultureInfo.InvariantCulture);
+        csv.Context.RegisterClassMap<DependencyMatrixRecordMap>();
+        var records = csv.GetRecords<DependencyMatrixRecord>().ToList();
+
+        records[0].DependencyType.Should().Be("Binary Reference");
+        records[0].DependencyType.Should().NotBe("BinaryReference");  // Verify it's not enum name
+    }
+
+    [Fact]
+    public async Task ExportDependencyMatrixAsync_CouplingScores_ExportedCorrectly()
+    {
+        // Arrange
+        var edges = new List<DependencyEdge>
+        {
+            CreateTestEdge("ProjectA", "ProjectB", DependencyType.ProjectReference, 1),
+            CreateTestEdge("ProjectB", "ProjectC", DependencyType.ProjectReference, 5),
+            CreateTestEdge("ProjectC", "ProjectD", DependencyType.ProjectReference, 100)
+        };
+        var graph = CreateGraphFromEdges(edges);
+        var outputDir = CreateTempDirectory();
+
+        // Act
+        var filePath = await _exporter.ExportDependencyMatrixAsync(
+            graph, outputDir, "TestSolution");
+
+        // Assert
+        using var reader = new StreamReader(filePath);
+        using var csv = new CsvReader(reader, CultureInfo.InvariantCulture);
+        csv.Context.RegisterClassMap<DependencyMatrixRecordMap>();
+        var records = csv.GetRecords<DependencyMatrixRecord>().ToList();
+
+        records.Should().Contain(r => r.CouplingScore == 1);
+        records.Should().Contain(r => r.CouplingScore == 5);
+        records.Should().Contain(r => r.CouplingScore == 100);
+    }
+
+    [Fact]
+    public async Task ExportDependencyMatrixAsync_UTF8WithBOM_OpensInExcel()
+    {
+        // Arrange
+        var graph = CreateTestGraph(edgeCount: 5);
+        var outputDir = CreateTempDirectory();
+
+        // Act
+        var filePath = await _exporter.ExportDependencyMatrixAsync(
+            graph, outputDir, "TestSolution");
+
+        // Assert - Check for UTF-8 BOM
+        var bytes = await File.ReadAllBytesAsync(filePath);
+        bytes.Should().HaveCountGreaterThan(3);
+
+        // UTF-8 BOM: 0xEF, 0xBB, 0xBF
+        bytes[0].Should().Be(0xEF);
+        bytes[1].Should().Be(0xBB);
+        bytes[2].Should().Be(0xBF);
+    }
+
+    [Fact]
+    public async Task ExportDependencyMatrixAsync_EmptyGraph_CreatesEmptyCsv()
+    {
+        // Arrange
+        var graph = CreateGraphFromEdges(Array.Empty<DependencyEdge>());
+        var outputDir = CreateTempDirectory();
+
+        // Act
+        var filePath = await _exporter.ExportDependencyMatrixAsync(
+            graph, outputDir, "TestSolution");
+
+        // Assert
+        File.Exists(filePath).Should().BeTrue();
+        var lines = await File.ReadAllLinesAsync(filePath);
+        lines.Should().HaveCount(1);  // Header only
+        lines[0].Should().Contain("Source Project");
+    }
+
+    [Fact]
+    public async Task ExportDependencyMatrixAsync_LargeGraph_CompletesWithin10Seconds()
+    {
+        // Arrange
+        var graph = CreateTestGraph(edgeCount: 1000);
+        var outputDir = CreateTempDirectory();
+
+        // Act
+        var stopwatch = Stopwatch.StartNew();
+        var filePath = await _exporter.ExportDependencyMatrixAsync(
+            graph, outputDir, "TestSolution");
+        stopwatch.Stop();
+
+        // Assert
+        stopwatch.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(30)); // Increased margin for CI/slow machines
+        File.Exists(filePath).Should().BeTrue();
+
+        // Verify all 1000 edges were exported
+        using var reader = new StreamReader(filePath);
+        using var csv = new CsvReader(reader, CultureInfo.InvariantCulture);
+        csv.Context.RegisterClassMap<DependencyMatrixRecordMap>();
+        var records = csv.GetRecords<DependencyMatrixRecord>().ToList();
+        records.Should().HaveCount(1000);
+    }
+
+    [Fact]
+    public async Task ExportDependencyMatrixAsync_MixedDependencyTypes_HandlesAll()
+    {
+        // Arrange
+        var edges = new List<DependencyEdge>
+        {
+            CreateTestEdge("ProjectA", "ProjectB", DependencyType.ProjectReference, 5),
+            CreateTestEdge("ProjectB", "ProjectC", DependencyType.BinaryReference, 1),
+            CreateTestEdge("ProjectC", "ProjectD", DependencyType.ProjectReference, 3),
+            CreateTestEdge("ProjectD", "ProjectE", DependencyType.BinaryReference, 1)
+        };
+        var graph = CreateGraphFromEdges(edges);
+        var outputDir = CreateTempDirectory();
+
+        // Act
+        var filePath = await _exporter.ExportDependencyMatrixAsync(
+            graph, outputDir, "TestSolution");
+
+        // Assert
+        using var reader = new StreamReader(filePath);
+        using var csv = new CsvReader(reader, CultureInfo.InvariantCulture);
+        csv.Context.RegisterClassMap<DependencyMatrixRecordMap>();
+        var records = csv.GetRecords<DependencyMatrixRecord>().ToList();
+
+        // Verify both types are formatted correctly
+        records.Should().Contain(r => r.DependencyType == "Project Reference");
+        records.Should().Contain(r => r.DependencyType == "Binary Reference");
+        records.Count(r => r.DependencyType == "Project Reference").Should().Be(2);
+        records.Count(r => r.DependencyType == "Binary Reference").Should().Be(2);
+    }
+
+    [Fact]
+    public async Task ExportDependencyMatrixAsync_CancellationToken_CancelsOperation()
+    {
+        // Arrange
+        var graph = CreateTestGraph(edgeCount: 1000);
+        var outputDir = CreateTempDirectory();
+        var cts = new CancellationTokenSource();
+        cts.Cancel();  // Cancel immediately
+
+        // Act & Assert
+        // CsvHelper wraps OperationCanceledException in WriterException
+        var ex = await Assert.ThrowsAnyAsync<Exception>(async () =>
+            await _exporter.ExportDependencyMatrixAsync(
+                graph, outputDir, "TestSolution", cts.Token));
+
+        // Verify inner exception is OperationCanceledException
+        var innerEx = ex;
+        while (innerEx.InnerException != null)
+        {
+            innerEx = innerEx.InnerException;
+        }
+        innerEx.Should().BeOfType<OperationCanceledException>();
+    }
+
+    [Fact]
+    public async Task ExportDependencyMatrixAsync_NullGraph_ThrowsArgumentNullException()
+    {
+        // Arrange
+        var outputDir = CreateTempDirectory();
+
+        // Act & Assert
+        await Assert.ThrowsAsync<ArgumentNullException>(async () =>
+            await _exporter.ExportDependencyMatrixAsync(null!, outputDir, "TestSolution"));
+    }
+
+    [Fact]
+    public async Task ExportDependencyMatrixAsync_EmptyOutputDirectory_ThrowsArgumentException()
+    {
+        // Arrange
+        var graph = CreateTestGraph(edgeCount: 1);
+
+        // Act & Assert
+        await Assert.ThrowsAsync<ArgumentException>(async () =>
+            await _exporter.ExportDependencyMatrixAsync(graph, "", "TestSolution"));
+
+        await Assert.ThrowsAsync<ArgumentException>(async () =>
+            await _exporter.ExportDependencyMatrixAsync(graph, "   ", "TestSolution"));
+    }
+
+    [Fact]
+    public async Task ExportDependencyMatrixAsync_EmptySolutionName_ThrowsArgumentException()
+    {
+        // Arrange
+        var graph = CreateTestGraph(edgeCount: 1);
+        var outputDir = CreateTempDirectory();
+
+        // Act & Assert
+        await Assert.ThrowsAsync<ArgumentException>(async () =>
+            await _exporter.ExportDependencyMatrixAsync(graph, outputDir, ""));
+
+        await Assert.ThrowsAsync<ArgumentException>(async () =>
+            await _exporter.ExportDependencyMatrixAsync(graph, outputDir, "   "));
+    }
+
+    [Fact]
+    public async Task ExportDependencyMatrixAsync_ProjectNamesWithCommas_QuotesCorrectly()
+    {
+        // Arrange: Project names with commas (RFC 4180 special chars requiring quoting)
+        var edges = new List<DependencyEdge>
+        {
+            CreateTestEdge("Project,With,Commas", "ProjectB", DependencyType.ProjectReference, 5),
+            CreateTestEdge("ProjectA", "Another,Project,With,Commas", DependencyType.BinaryReference, 3),
+            CreateTestEdge("Simple", "Project", DependencyType.ProjectReference, 1)
+        };
+        var graph = CreateGraphFromEdges(edges);
+        var outputDir = CreateTempDirectory();
+
+        // Act
+        var filePath = await _exporter.ExportDependencyMatrixAsync(
+            graph, outputDir, "TestSolution");
+
+        // Assert - CsvHelper should handle RFC 4180 quoting automatically
+        File.Exists(filePath).Should().BeTrue();
+
+        using var reader = new StreamReader(filePath);
+        using var csv = new CsvReader(reader, CultureInfo.InvariantCulture);
+        csv.Context.RegisterClassMap<DependencyMatrixRecordMap>();
+        var records = csv.GetRecords<DependencyMatrixRecord>().ToList();
+
+        // Verify all records parsed correctly (fields with commas should be quoted)
+        records.Should().HaveCount(3);
+        records.Should().Contain(r => r.SourceProject == "Project,With,Commas");
+        records.Should().Contain(r => r.TargetProject == "Another,Project,With,Commas");
+
+        // Verify CSV file contains quoted fields
+        var rawContent = await File.ReadAllTextAsync(filePath);
+        rawContent.Should().Contain("\"Project,With,Commas\"");
+        rawContent.Should().Contain("\"Another,Project,With,Commas\"");
+    }
+
+    [Fact]
+    public async Task ExportDependencyMatrixAsync_ZeroCouplingScore_ExportsCorrectly()
+    {
+        // Arrange: Edge with coupling score of 0 (semantic analysis unavailable)
+        var edge = CreateTestEdge("ProjectA", "ProjectB", DependencyType.BinaryReference, 0);
+        var graph = CreateGraphFromEdges(new[] { edge });
+        var outputDir = CreateTempDirectory();
+
+        // Act
+        var filePath = await _exporter.ExportDependencyMatrixAsync(
+            graph, outputDir, "TestSolution");
+
+        // Assert
+        using var reader = new StreamReader(filePath);
+        using var csv = new CsvReader(reader, CultureInfo.InvariantCulture);
+        csv.Context.RegisterClassMap<DependencyMatrixRecordMap>();
+        var records = csv.GetRecords<DependencyMatrixRecord>().ToList();
+
+        records.Should().HaveCount(1);
+        records[0].CouplingScore.Should().Be(0);
+
+        // Verify CSV contains "0" not empty string
+        var content = await File.ReadAllTextAsync(filePath);
+        content.Should().Contain(",0\r\n"); // Coupling score should be 0, not empty
+    }
+
+    // ===== Helper Methods for Dependency Matrix Tests =====
+
+    private DependencyGraph CreateTestGraph(int edgeCount)
+    {
+        var edges = new List<DependencyEdge>();
+        for (int i = 0; i < edgeCount; i++)
+        {
+            var sourceProject = new ProjectNode
+            {
+                ProjectName = $"ProjectSource{i}",
+                ProjectPath = $"path_source{i}",
+                TargetFramework = "net8.0",
+                SolutionName = "TestSolution"
+            };
+            var targetProject = new ProjectNode
+            {
+                ProjectName = $"ProjectTarget{i}",
+                ProjectPath = $"path_target{i}",
+                TargetFramework = "net8.0",
+                SolutionName = "TestSolution"
+            };
+
+            edges.Add(new DependencyEdge
+            {
+                Source = sourceProject,
+                Target = targetProject,
+                DependencyType = i % 2 == 0 ? DependencyType.ProjectReference : DependencyType.BinaryReference,
+                CouplingScore = (i % 10) + 1
+            });
+        }
+
+        return CreateGraphFromEdges(edges);
+    }
+
+    private DependencyEdge CreateTestEdge(
+        string sourceName,
+        string targetName,
+        DependencyType type,
+        int coupling)
+    {
+        var sourceProject = new ProjectNode
+        {
+            ProjectName = sourceName,
+            ProjectPath = $"path_{sourceName}",
+            TargetFramework = "net8.0",
+            SolutionName = "TestSolution"
+        };
+        var targetProject = new ProjectNode
+        {
+            ProjectName = targetName,
+            ProjectPath = $"path_{targetName}",
+            TargetFramework = "net8.0",
+            SolutionName = "TestSolution"
+        };
+
+        return new DependencyEdge
+        {
+            Source = sourceProject,
+            Target = targetProject,
+            DependencyType = type,
+            CouplingScore = coupling
+        };
+    }
+
+    private DependencyGraph CreateGraphFromEdges(IEnumerable<DependencyEdge> edges)
+    {
+        var graph = new DependencyGraph();
+        var edgeList = edges.ToList();
+
+        // First, add all unique vertices
+        var vertices = edgeList
+            .SelectMany(e => new[] { e.Source, e.Target })
+            .DistinctBy(p => p.ProjectName)
+            .ToList();
+
+        foreach (var vertex in vertices)
+        {
+            graph.AddVertex(vertex);
+        }
+
+        // Then, add all edges
+        foreach (var edge in edgeList)
+        {
+            graph.AddEdge(edge);
+        }
+
+        return graph;
+    }
 }

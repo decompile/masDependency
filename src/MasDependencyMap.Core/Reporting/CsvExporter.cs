@@ -6,6 +6,7 @@ using System.Text;
 using CsvHelper;
 using CsvHelper.Configuration;
 using MasDependencyMap.Core.CycleAnalysis;
+using MasDependencyMap.Core.DependencyAnalysis;
 using MasDependencyMap.Core.ExtractionScoring;
 using Microsoft.Extensions.Logging;
 
@@ -161,6 +162,71 @@ public sealed class CsvExporter : ICsvExporter
         return filePath;
     }
 
+    /// <inheritdoc />
+    public async Task<string> ExportDependencyMatrixAsync(
+        DependencyGraph graph,
+        string outputDirectory,
+        string solutionName,
+        CancellationToken cancellationToken = default)
+    {
+        // Validate inputs
+        ArgumentNullException.ThrowIfNull(graph);
+        ArgumentException.ThrowIfNullOrWhiteSpace(outputDirectory);
+        ArgumentException.ThrowIfNullOrWhiteSpace(solutionName);
+
+        var edges = graph.Edges.ToList();
+        _logger.LogInformation(
+            "Exporting {EdgeCount} dependency edges to CSV for solution {SolutionName}",
+            edges.Count,
+            solutionName);
+
+        // Sort by source project, then target project (both ascending)
+        var sortedEdges = edges
+            .OrderBy(e => e.Source.ProjectName)
+            .ThenBy(e => e.Target.ProjectName)
+            .ToList();
+
+        // Start performance measurement after sorting
+        var stopwatch = Stopwatch.StartNew();
+
+        // Generate filename and ensure directory exists
+        var sanitizedSolutionName = SanitizeFileName(solutionName);
+        var fileName = $"{sanitizedSolutionName}-dependency-matrix.csv";
+        var filePath = Path.Combine(outputDirectory, fileName);
+
+        Directory.CreateDirectory(outputDirectory);
+
+        // Configure CsvHelper for Excel compatibility
+        var config = new CsvConfiguration(CultureInfo.InvariantCulture)
+        {
+            HasHeaderRecord = true,
+            Encoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: true), // UTF-8 with BOM
+            NewLine = "\r\n" // CRLF for Windows/Excel compatibility
+        };
+
+        // Write CSV using CsvHelper
+        await using var writer = new StreamWriter(filePath, append: false, encoding: config.Encoding);
+        await using var csv = new CsvWriter(writer, config);
+
+        // Register ClassMap for column header customization
+        csv.Context.RegisterClassMap<DependencyMatrixRecordMap>();
+
+        // Map DependencyEdge objects to DependencyMatrixRecord POCOs
+        var records = sortedEdges.Select(MapToRecord).ToList();
+
+        // Write header and data rows
+        await csv.WriteRecordsAsync(records, cancellationToken).ConfigureAwait(false);
+
+        stopwatch.Stop();
+        _logger.LogInformation(
+            "Exported {RecordCount} dependency edges to CSV at {FilePath} in {ElapsedMs}ms",
+            records.Count,
+            filePath,
+            stopwatch.Elapsed.TotalMilliseconds);
+
+        return filePath;
+    }
+
     /// <summary>
     /// Maps an ExtractionScore to ExtractionScoreRecord for CSV export.
     /// Handles null CouplingMetric by exporting "N/A".
@@ -220,6 +286,28 @@ public sealed class CsvExporter : ICsvExporter
             CouplingScore = couplingScore
         };
     }
+
+    /// <summary>
+    /// Maps a DependencyEdge to DependencyMatrixRecord for CSV export.
+    /// Formats DependencyType enum to human-readable string.
+    /// </summary>
+    private DependencyMatrixRecord MapToRecord(DependencyEdge edge)
+    {
+        return new DependencyMatrixRecord
+        {
+            SourceProject = edge.Source.ProjectName,
+            TargetProject = edge.Target.ProjectName,
+            DependencyType = FormatDependencyType(edge.DependencyType),
+            CouplingScore = edge.CouplingScore
+        };
+    }
+
+    private static string FormatDependencyType(DependencyType type) => type switch
+    {
+        DependencyType.ProjectReference => "Project Reference",
+        DependencyType.BinaryReference => "Binary Reference",
+        _ => throw new ArgumentOutOfRangeException(nameof(type), type, "Unknown dependency type")
+    };
 
     /// <summary>
     /// Sanitizes a file name by replacing invalid characters with underscores.

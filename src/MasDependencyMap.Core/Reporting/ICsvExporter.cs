@@ -48,6 +48,22 @@ public interface ICsvExporter
         string solutionName,
         CancellationToken cancellationToken = default);
 
-    // Story 5.7 will add:
-    // Task<string> ExportDependencyMatrixAsync(...);
+    /// <summary>
+    /// Exports full dependency matrix to CSV file.
+    /// Includes all dependency edges with coupling scores.
+    /// Results are sorted by source project, then target project (both ascending).
+    /// </summary>
+    /// <param name="graph">Dependency graph containing all edges to export.</param>
+    /// <param name="outputDirectory">Directory where CSV file will be created.</param>
+    /// <param name="solutionName">Solution name used for CSV filename.</param>
+    /// <param name="cancellationToken">Cancellation token for async operation.</param>
+    /// <returns>Absolute path to the generated CSV file.</returns>
+    /// <exception cref="ArgumentNullException">When graph is null.</exception>
+    /// <exception cref="ArgumentException">When outputDirectory or solutionName is empty or whitespace.</exception>
+    /// <exception cref="IOException">When file write operation fails.</exception>
+    Task<string> ExportDependencyMatrixAsync(
+        DependencyAnalysis.DependencyGraph graph,
+        string outputDirectory,
+        string solutionName,
+        CancellationToken cancellationToken = default);
 }
