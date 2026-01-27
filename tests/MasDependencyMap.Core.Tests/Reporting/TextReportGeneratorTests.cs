@@ -5,10 +5,13 @@ using FluentAssertions;
 using MasDependencyMap.Core.Configuration;
 using MasDependencyMap.Core.CycleAnalysis;
 using MasDependencyMap.Core.DependencyAnalysis;
+using MasDependencyMap.Core.ExtractionScoring;
 using MasDependencyMap.Core.Reporting;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using Moq;
 using Xunit;
 
 public class TextReportGeneratorTests : IDisposable
@@ -765,6 +768,489 @@ public class TextReportGeneratorTests : IDisposable
         content.Should().Contain("LargeProject149");
     }
 
+    // ================================================================================
+    // Story 5.3: Extraction Difficulty Scoring Section Tests
+    // ================================================================================
+
+    [Fact]
+    public async Task GenerateAsync_WithExtractionScores_IncludesExtractionSection()
+    {
+        // Arrange
+        var graph = CreateTestGraph(projectCount: 20);
+        var scores = CreateTestExtractionScores(count: 20);
+        var outputDir = CreateTempDirectory();
+
+        // Act
+        var reportPath = await _generator.GenerateAsync(
+            graph, outputDir, "TestSolution", extractionScores: scores);
+
+        // Assert
+        var content = await File.ReadAllTextAsync(reportPath);
+        content.Should().Contain("EXTRACTION DIFFICULTY SCORES");
+        content.Should().Contain("Easiest Candidates");
+        content.Should().Contain("Hardest Candidates");
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WithExtractionScores_ShowsTop10Easiest()
+    {
+        // Arrange
+        var graph = CreateTestGraph(projectCount: 50);
+        var scores = CreateTestExtractionScores(count: 50, randomize: true);
+        var outputDir = CreateTempDirectory();
+
+        // Act
+        var reportPath = await _generator.GenerateAsync(
+            graph, outputDir, "TestSolution", extractionScores: scores);
+
+        // Assert
+        var content = await File.ReadAllTextAsync(reportPath);
+
+        // Verify top 10 easiest are sorted ascending by score
+        var sortedScores = scores.OrderBy(s => s.FinalScore).Take(10).ToList();
+        foreach (var score in sortedScores)
+        {
+            content.Should().Contain(score.ProjectName);
+        }
+
+        // Verify rank numbering 1-10
+        content.Should().Contain(" 1. ");
+        content.Should().Contain("10. ");
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WithExtractionScores_ShowsBottom10Hardest()
+    {
+        // Arrange
+        var graph = CreateTestGraph(projectCount: 50);
+        var scores = CreateTestExtractionScores(count: 50, randomize: true);
+        var outputDir = CreateTempDirectory();
+
+        // Act
+        var reportPath = await _generator.GenerateAsync(
+            graph, outputDir, "TestSolution", extractionScores: scores);
+
+        // Assert
+        var content = await File.ReadAllTextAsync(reportPath);
+
+        // Verify bottom 10 hardest are sorted descending by score
+        var hardestScores = scores.OrderByDescending(s => s.FinalScore).Take(10).ToList();
+        foreach (var score in hardestScores)
+        {
+            content.Should().Contain(score.ProjectName);
+        }
+
+        // Verify subsection header (dynamic range based on actual scores)
+        content.Should().Contain("Hardest Candidates (Scores");
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WithExtractionScores_FormatsMetricsCorrectly()
+    {
+        // Arrange
+        var graph = CreateTestGraph(projectCount: 10);
+
+        var notificationScore = new ExtractionScore(
+            "NotificationService",
+            "C:\\projects\\NotificationService.csproj",
+            23,
+            new CouplingMetric("NotificationService", 3, 2, 11, 15.5),
+            new ComplexityMetric("NotificationService", "C:\\projects\\NotificationService.csproj", 50, 200, 4.0, 20.3),
+            new TechDebtMetric("NotificationService", "C:\\projects\\NotificationService.csproj", "net8.0", 5.2),
+            new ExternalApiMetric("NotificationService", "C:\\projects\\NotificationService.csproj", 0, 0, new ApiTypeBreakdown(0, 0, 0)));
+
+        var emailScore = new ExtractionScore(
+            "EmailSender",
+            "C:\\projects\\EmailSender.csproj",
+            28,
+            new CouplingMetric("EmailSender", 1, 4, 7, 18.2),
+            new ComplexityMetric("EmailSender", "C:\\projects\\EmailSender.csproj", 30, 150, 5.0, 22.5),
+            new TechDebtMetric("EmailSender", "C:\\projects\\EmailSender.csproj", "net8.0", 6.1),
+            new ExternalApiMetric("EmailSender", "C:\\projects\\EmailSender.csproj", 1, 10, new ApiTypeBreakdown(1, 0, 0)));
+
+        var scores = new List<ExtractionScore> { notificationScore, emailScore };
+        var outputDir = CreateTempDirectory();
+
+        // Act
+        var reportPath = await _generator.GenerateAsync(
+            graph, outputDir, "TestSolution", extractionScores: scores);
+
+        // Assert
+        var content = await File.ReadAllTextAsync(reportPath);
+
+        // Verify easiest candidates format
+        content.Should().Contain(" 1. NotificationService (Score: 23) - 3 incoming, 2 outgoing, no external APIs");
+        content.Should().Contain(" 2. EmailSender (Score: 28) - 1 incoming, 4 outgoing, 1 API");
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WithNullScores_DoesNotIncludeExtractionSection()
+    {
+        // Arrange
+        var graph = CreateTestGraph(projectCount: 10);
+        var outputDir = CreateTempDirectory();
+
+        // Act
+        var reportPath = await _generator.GenerateAsync(
+            graph, outputDir, "TestSolution", extractionScores: null);
+
+        // Assert
+        var content = await File.ReadAllTextAsync(reportPath);
+        content.Should().NotContain("EXTRACTION DIFFICULTY SCORES");
+        content.Should().NotContain("Easiest Candidates");
+
+        // Should still have Stories 5.1/5.2 sections
+        content.Should().Contain("DEPENDENCY OVERVIEW");
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WithEmptyScores_DoesNotIncludeExtractionSection()
+    {
+        // Arrange
+        var graph = CreateTestGraph(projectCount: 10);
+        var scores = new List<ExtractionScore>();  // Empty list
+        var outputDir = CreateTempDirectory();
+
+        // Act
+        var reportPath = await _generator.GenerateAsync(
+            graph, outputDir, "TestSolution", extractionScores: scores);
+
+        // Assert
+        var content = await File.ReadAllTextAsync(reportPath);
+        content.Should().NotContain("EXTRACTION DIFFICULTY SCORES");
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WithFewerThan10Scores_ShowsAllAvailable()
+    {
+        // Arrange
+        var graph = CreateTestGraph(projectCount: 5);
+        var scores = CreateTestExtractionScores(count: 5);  // Only 5 projects
+        var outputDir = CreateTempDirectory();
+
+        // Act
+        var reportPath = await _generator.GenerateAsync(
+            graph, outputDir, "TestSolution", extractionScores: scores);
+
+        // Assert
+        var content = await File.ReadAllTextAsync(reportPath);
+
+        // Verify all 5 projects shown in both sections
+        content.Should().Contain("EXTRACTION DIFFICULTY SCORES");
+
+        // Count how many ranks appear in easiest section
+        var easiestSection = content.Substring(content.IndexOf("Easiest Candidates"));
+        easiestSection = easiestSection.Substring(0, easiestSection.IndexOf("Hardest Candidates"));
+
+        for (int i = 1; i <= 5; i++)
+        {
+            easiestSection.Should().Contain($" {i}. ");
+        }
+
+        // Should not have rank 6 or higher in easiest section
+        easiestSection.Should().NotContain(" 6. ");
+    }
+
+    [Fact]
+    public async Task GenerateAsync_ExtractionSection_AppearsAfterCycleDetection()
+    {
+        // Arrange
+        var graph = CreateTestGraph(projectCount: 20);
+        var cycles = CreateTestCycles(cycleCount: 3);
+        var scores = CreateTestExtractionScores(count: 20);
+        var outputDir = CreateTempDirectory();
+
+        // Act
+        var reportPath = await _generator.GenerateAsync(
+            graph, outputDir, "TestSolution", cycles: cycles, extractionScores: scores);
+
+        // Assert
+        var content = await File.ReadAllTextAsync(reportPath);
+
+        var cycleDetectionIndex = content.IndexOf("CYCLE DETECTION");
+        var extractionScoresIndex = content.IndexOf("EXTRACTION DIFFICULTY SCORES");
+
+        cycleDetectionIndex.Should().BeGreaterThan(0, "Cycle Detection should exist");
+        extractionScoresIndex.Should().BeGreaterThan(cycleDetectionIndex,
+            "Extraction Scores should appear after Cycle Detection");
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WithZeroExternalApis_FormatsAsNoApis()
+    {
+        // Arrange
+        var graph = CreateTestGraph(projectCount: 5);
+
+        var service1 = new ExtractionScore(
+            "Service1",
+            "C:\\projects\\Service1.csproj",
+            20,
+            new CouplingMetric("Service1", 2, 1, 7, 10.0),
+            new ComplexityMetric("Service1", "C:\\projects\\Service1.csproj", 20, 100, 5.0, 15.0),
+            new TechDebtMetric("Service1", "C:\\projects\\Service1.csproj", "net8.0", 3.0),
+            new ExternalApiMetric("Service1", "C:\\projects\\Service1.csproj", 0, 0, new ApiTypeBreakdown(0, 0, 0)));
+
+        var service2 = new ExtractionScore(
+            "Service2",
+            "C:\\projects\\Service2.csproj",
+            25,
+            new CouplingMetric("Service2", 3, 2, 11, 12.0),
+            new ComplexityMetric("Service2", "C:\\projects\\Service2.csproj", 25, 120, 4.8, 18.0),
+            new TechDebtMetric("Service2", "C:\\projects\\Service2.csproj", "net8.0", 4.0),
+            new ExternalApiMetric("Service2", "C:\\projects\\Service2.csproj", 1, 10, new ApiTypeBreakdown(1, 0, 0)));
+
+        var scores = new List<ExtractionScore> { service1, service2 };
+        var outputDir = CreateTempDirectory();
+
+        // Act
+        var reportPath = await _generator.GenerateAsync(
+            graph, outputDir, "TestSolution", extractionScores: scores);
+
+        // Assert
+        var content = await File.ReadAllTextAsync(reportPath);
+
+        // Verify grammatical correctness
+        content.Should().Contain("no external APIs");  // Not "0 external APIs"
+        content.Should().Contain("1 API");            // Singular, not "1 APIs"
+    }
+
+    [Fact]
+    public async Task GenerateAsync_HardestCandidates_ShowsComplexityLabels()
+    {
+        // Arrange
+        var graph = CreateTestGraph(projectCount: 10);
+
+        var legacyCore = new ExtractionScore(
+            "LegacyCore",
+            "C:\\projects\\LegacyCore.csproj",
+            89,
+            new CouplingMetric("LegacyCore", 15, 20, 65, 75.5),
+            new ComplexityMetric("LegacyCore", "C:\\projects\\LegacyCore.csproj", 200, 1500, 7.5, 82.3),
+            new TechDebtMetric("LegacyCore", "C:\\projects\\LegacyCore.csproj", "net45", 12.1),
+            new ExternalApiMetric("LegacyCore", "C:\\projects\\LegacyCore.csproj", 5, 50, new ApiTypeBreakdown(5, 0, 0)));
+
+        var dataLayer = new ExtractionScore(
+            "DataLayer",
+            "C:\\projects\\DataLayer.csproj",
+            85,
+            new CouplingMetric("DataLayer", 12, 18, 54, 52.2),
+            new ComplexityMetric("DataLayer", "C:\\projects\\DataLayer.csproj", 150, 800, 5.3, 45.8),
+            new TechDebtMetric("DataLayer", "C:\\projects\\DataLayer.csproj", "net46", 8.4),
+            new ExternalApiMetric("DataLayer", "C:\\projects\\DataLayer.csproj", 3, 30, new ApiTypeBreakdown(3, 0, 0)));
+
+        var scores = new List<ExtractionScore> { legacyCore, dataLayer };
+        var outputDir = CreateTempDirectory();
+
+        // Act
+        var reportPath = await _generator.GenerateAsync(
+            graph, outputDir, "TestSolution", extractionScores: scores);
+
+        // Assert
+        var content = await File.ReadAllTextAsync(reportPath);
+
+        // Verify hardest candidates section exists
+        content.Should().Contain("Hardest Candidates");
+
+        // Verify complexity labels
+        content.Should().Contain("High coupling");
+        content.Should().Contain("High complexity");
+        content.Should().Contain("Moderate complexity");
+        content.Should().Contain("Tech debt");
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WithExtractionScores_FormatsWithCorrectSeparators()
+    {
+        // Arrange
+        var graph = CreateTestGraph(projectCount: 20);
+        var scores = CreateTestExtractionScores(count: 20);
+        var outputDir = CreateTempDirectory();
+
+        // Act
+        var reportPath = await _generator.GenerateAsync(
+            graph, outputDir, "TestSolution", extractionScores: scores);
+
+        // Assert
+        var content = await File.ReadAllTextAsync(reportPath);
+
+        // Verify section separators (80 '=' characters)
+        var separator = new string('=', 80);
+        content.Should().Contain(separator);
+
+        // Verify section header
+        content.Should().Contain("EXTRACTION DIFFICULTY SCORES");
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WithLargeExtractionScoresList_CompletesWithinPerformanceBudget()
+    {
+        // Arrange
+        var graph = CreateTestGraph(projectCount: 400);
+        var scores = CreateTestExtractionScores(count: 400, randomize: true);
+        var outputDir = CreateTempDirectory();
+
+        // Act
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var reportPath = await _generator.GenerateAsync(
+            graph, outputDir, "LargeSolution", extractionScores: scores);
+        stopwatch.Stop();
+
+        // Assert
+        stopwatch.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(10),
+            "extraction scores section should not significantly impact performance");
+
+        var content = await File.ReadAllTextAsync(reportPath);
+        content.Should().Contain("EXTRACTION DIFFICULTY SCORES");
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WithNullItemInExtractionScores_ThrowsArgumentException()
+    {
+        // Code review fix: Validate null items in list don't cause crashes
+        // Arrange
+        var graph = CreateTestGraph(projectCount: 5);
+        var scores = new List<ExtractionScore>
+        {
+            CreateTestExtractionScores(count: 1)[0],
+            null!,  // Null item in the list
+            CreateTestExtractionScores(count: 1)[0]
+        };
+        var outputDir = CreateTempDirectory();
+
+        // Act & Assert
+        var exception = await Assert.ThrowsAsync<ArgumentException>(
+            () => _generator.GenerateAsync(graph, outputDir, "TestSolution", extractionScores: scores));
+
+        exception.ParamName.Should().Be("extractionScores");
+        exception.Message.Should().Contain("contains null items");
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WithRealExtractionScoreCalculator_ProducesCorrectReport()
+    {
+        // Integration test: Use real ExtractionScoreCalculator from Epic 4
+        // Code review fix: Verify report works with actual Epic 4 components, not just test helpers
+        // Arrange
+        var graph = new DependencyGraph();
+
+        // Create test projects with varying characteristics
+        var simpleProject = new ProjectNode
+        {
+            ProjectName = "SimpleUtility",
+            ProjectPath = "C:\\projects\\SimpleUtility.csproj",
+            SolutionName = "Solution1",
+            TargetFramework = "net8.0"
+        };
+        var complexProject = new ProjectNode
+        {
+            ProjectName = "LegacyCore",
+            ProjectPath = "C:\\projects\\LegacyCore.csproj",
+            SolutionName = "Solution1",
+            TargetFramework = "net45"
+        };
+        var mediumProject = new ProjectNode
+        {
+            ProjectName = "BusinessLogic",
+            ProjectPath = "C:\\projects\\BusinessLogic.csproj",
+            SolutionName = "Solution1",
+            TargetFramework = "net6.0"
+        };
+
+        graph.AddVertex(simpleProject);
+        graph.AddVertex(complexProject);
+        graph.AddVertex(mediumProject);
+
+        // Create dependencies: LegacyCore depends on both others (high coupling)
+        graph.AddEdge(new DependencyEdge
+        {
+            Source = complexProject,
+            Target = simpleProject,
+            DependencyType = DependencyType.ProjectReference
+        });
+        graph.AddEdge(new DependencyEdge
+        {
+            Source = complexProject,
+            Target = mediumProject,
+            DependencyType = DependencyType.ProjectReference
+        });
+
+        // Use real ExtractionScoreCalculator with mocked metric calculators
+        // (Real Epic 4 calculators require actual .csproj files and Roslyn workspace)
+        var mockCouplingCalculator = new Mock<ICouplingMetricCalculator>();
+        var mockComplexityCalculator = new Mock<IComplexityMetricCalculator>();
+        var mockTechDebtAnalyzer = new Mock<ITechDebtAnalyzer>();
+        var mockApiDetector = new Mock<IExternalApiDetector>();
+
+        // Setup realistic metric returns
+        mockCouplingCalculator.Setup(c => c.CalculateAsync(It.IsAny<DependencyGraph>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<CouplingMetric>
+            {
+                new CouplingMetric("SimpleUtility", 0, 1, 3, 10.0),
+                new CouplingMetric("LegacyCore", 2, 0, 6, 75.0),
+                new CouplingMetric("BusinessLogic", 0, 1, 3, 35.0)
+            });
+
+        mockComplexityCalculator.Setup(c => c.CalculateAsync(It.Is<ProjectNode>(p => p.ProjectName == "SimpleUtility"), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ComplexityMetric("SimpleUtility", "C:\\projects\\SimpleUtility.csproj", 10, 50, 5.0, 15.0));
+        mockComplexityCalculator.Setup(c => c.CalculateAsync(It.Is<ProjectNode>(p => p.ProjectName == "LegacyCore"), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ComplexityMetric("LegacyCore", "C:\\projects\\LegacyCore.csproj", 200, 1500, 7.5, 85.0));
+        mockComplexityCalculator.Setup(c => c.CalculateAsync(It.Is<ProjectNode>(p => p.ProjectName == "BusinessLogic"), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ComplexityMetric("BusinessLogic", "C:\\projects\\BusinessLogic.csproj", 50, 300, 6.0, 45.0));
+
+        mockTechDebtAnalyzer.Setup(t => t.AnalyzeAsync(It.Is<ProjectNode>(p => p.ProjectName == "SimpleUtility"), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TechDebtMetric("SimpleUtility", "C:\\projects\\SimpleUtility.csproj", "net8.0", 5.0));
+        mockTechDebtAnalyzer.Setup(t => t.AnalyzeAsync(It.Is<ProjectNode>(p => p.ProjectName == "LegacyCore"), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TechDebtMetric("LegacyCore", "C:\\projects\\LegacyCore.csproj", "net45", 90.0));
+        mockTechDebtAnalyzer.Setup(t => t.AnalyzeAsync(It.Is<ProjectNode>(p => p.ProjectName == "BusinessLogic"), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TechDebtMetric("BusinessLogic", "C:\\projects\\BusinessLogic.csproj", "net6.0", 25.0));
+
+        mockApiDetector.Setup(a => a.DetectAsync(It.IsAny<ProjectNode>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((ProjectNode p, CancellationToken ct) =>
+                new ExternalApiMetric(p.ProjectName, p.ProjectPath, 0, 0, new ApiTypeBreakdown(0, 0, 0)));
+
+        var configuration = new ConfigurationBuilder().Build();
+        var scoreCalculator = new ExtractionScoreCalculator(
+            mockCouplingCalculator.Object,
+            mockComplexityCalculator.Object,
+            mockTechDebtAnalyzer.Object,
+            mockApiDetector.Object,
+            configuration,
+            NullLogger<ExtractionScoreCalculator>.Instance);
+
+        // Calculate scores using real Epic 4 calculator
+        var extractionScores = await scoreCalculator.CalculateForAllProjectsAsync(graph);
+
+        var outputDir = CreateTempDirectory();
+
+        // Act
+        var reportPath = await _generator.GenerateAsync(
+            graph, outputDir, "TestSolution", extractionScores: extractionScores);
+
+        // Assert
+        var content = await File.ReadAllTextAsync(reportPath);
+
+        // Verify scores were calculated by real Epic 4 calculator
+        extractionScores.Should().HaveCount(3, "calculator should score all 3 projects");
+
+        // Verify report contains extraction scores section
+        content.Should().Contain("EXTRACTION DIFFICULTY SCORES");
+        content.Should().Contain("Easiest Candidates");
+        content.Should().Contain("Hardest Candidates");
+
+        // Verify all project names appear
+        content.Should().Contain("SimpleUtility");
+        content.Should().Contain("LegacyCore");
+        content.Should().Contain("BusinessLogic");
+
+        // Verify dynamic score ranges are shown (not hardcoded 0-33, 67-100)
+        content.Should().Contain("Easiest Candidates (Scores");
+        content.Should().Contain("Hardest Candidates (Scores");
+
+        // Verify LegacyCore (high scores) appears in hardest section
+        var hardestSection = content.Substring(content.IndexOf("Hardest Candidates"));
+        hardestSection.Should().Contain("LegacyCore");
+    }
+
     // Helper: Create temp directory
     private string CreateTempDirectory()
     {
@@ -964,5 +1450,65 @@ public class TextReportGeneratorTests : IDisposable
         }
 
         return cycles;
+    }
+
+    // Helper: Create test extraction scores with configurable count and randomization
+    private IReadOnlyList<ExtractionScore> CreateTestExtractionScores(int count = 20, bool randomize = true)
+    {
+        var scores = new List<ExtractionScore>();
+        var random = new Random(42);  // Fixed seed for reproducible tests
+
+        for (int i = 0; i < count; i++)
+        {
+            var projectName = $"Project{i}";
+            var projectPath = $"C:\\projects\\Project{i}.csproj";
+            var finalScore = randomize ? random.Next(0, 100) : i * 5;
+            var incoming = random.Next(0, 10);
+            var outgoing = random.Next(0, 10);
+            var totalCouplingScore = (incoming * 3) + outgoing;
+            var apis = random.Next(0, 5);
+            var couplingScore = random.Next(0, 100);
+            var complexityScore = random.Next(0, 100);
+            var techDebtScore = random.Next(0, 100);
+
+            var couplingMetric = new CouplingMetric(
+                projectName,
+                incoming,
+                outgoing,
+                totalCouplingScore,
+                couplingScore);
+
+            var complexityMetric = new ComplexityMetric(
+                projectName,
+                projectPath,
+                random.Next(10, 100),  // MethodCount
+                random.Next(50, 500),  // TotalComplexity
+                random.NextDouble() * 10,  // AverageComplexity
+                complexityScore);
+
+            var techDebtMetric = new TechDebtMetric(
+                projectName,
+                projectPath,
+                "net8.0",
+                techDebtScore);
+
+            var externalApiMetric = new ExternalApiMetric(
+                projectName,
+                projectPath,
+                apis,
+                apis * 10.0,  // NormalizedScore
+                new ApiTypeBreakdown(0, 0, 0));
+
+            scores.Add(new ExtractionScore(
+                projectName,
+                projectPath,
+                finalScore,
+                couplingMetric,
+                complexityMetric,
+                techDebtMetric,
+                externalApiMetric));
+        }
+
+        return scores;
     }
 }

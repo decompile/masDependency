@@ -72,8 +72,18 @@ public sealed class TextReportGenerator : ITextReportGenerator
             AppendCycleDetection(report, cycles);
         }
 
+        // Story 5.3: Extraction difficulty scoring section
+        if (extractionScores != null && extractionScores.Count > 0)
+        {
+            // Validate no null items in the list (defensive programming)
+            if (extractionScores.Any(s => s == null))
+            {
+                throw new ArgumentException("Extraction scores list contains null items", nameof(extractionScores));
+            }
+            AppendExtractionScores(report, extractionScores);
+        }
+
         // Future stories will add more sections here
-        // Story 5.3: AppendExtractionScores(report, extractionScores);
         // Story 5.4: AppendRecommendations(report, recommendations);
 
         // Write to file (sanitize solution name to prevent path traversal)
@@ -221,6 +231,122 @@ public sealed class TextReportGenerator : ITextReportGenerator
         report.AppendLine();
         report.AppendLine(new string('=', ReportWidth));
         report.AppendLine();
+    }
+
+    /// <summary>
+    /// Appends the extraction difficulty scoring section showing ranked candidates for extraction.
+    /// Displays top 10 easiest and bottom 10 hardest candidates with their metrics.
+    /// </summary>
+    /// <param name="report">The StringBuilder to append to.</param>
+    /// <param name="extractionScores">The list of extraction scores for all projects.</param>
+    private void AppendExtractionScores(StringBuilder report, IReadOnlyList<ExtractionScore> extractionScores)
+    {
+        report.AppendLine("EXTRACTION DIFFICULTY SCORES");
+        report.AppendLine(new string('=', ReportWidth));
+        report.AppendLine();
+
+        _logger.LogDebug(
+            "Appending extraction scores section: {ScoreCount} projects, showing top {TopCount}/bottom {BottomCount}",
+            extractionScores.Count,
+            Math.Min(10, extractionScores.Count),
+            Math.Min(10, extractionScores.Count));
+
+        // Top 10 easiest candidates (lowest scores)
+        var easiestCandidates = extractionScores
+            .OrderBy(s => s.FinalScore)
+            .Take(10)
+            .ToList();
+
+        // Show actual score range instead of hardcoded 0-33 to avoid misleading stakeholders
+        var easiestMin = (int)easiestCandidates.Min(s => s.FinalScore);
+        var easiestMax = (int)easiestCandidates.Max(s => s.FinalScore);
+        report.AppendLine($"Easiest Candidates (Scores {easiestMin}-{easiestMax})");
+        report.AppendLine("These projects have minimal dependencies and low complexity, making them ideal");
+        report.AppendLine("candidates for extraction.");
+        report.AppendLine();
+
+        for (int i = 0; i < easiestCandidates.Count; i++)
+        {
+            var score = easiestCandidates[i];
+            var rank = i + 1;
+            var incomingRefs = score.CouplingMetric?.IncomingCount ?? 0;
+            var outgoingRefs = score.CouplingMetric?.OutgoingCount ?? 0;
+            var externalApis = score.ExternalApiMetric.EndpointCount;
+
+            var incomingText = $"{incomingRefs} incoming";
+            var outgoingText = $"{outgoingRefs} outgoing";
+            var apisText = FormatExternalApis(externalApis);
+
+            report.AppendLine($" {rank,2}. {score.ProjectName} (Score: {score.FinalScore:F0}) - {incomingText}, {outgoingText}, {apisText}");
+        }
+
+        report.AppendLine();
+
+        // Bottom 10 hardest candidates (highest scores)
+        var hardestCandidates = extractionScores
+            .OrderByDescending(s => s.FinalScore)
+            .Take(10)
+            .ToList();
+
+        // Show actual score range instead of hardcoded 67-100 to avoid misleading stakeholders
+        var hardestMin = (int)hardestCandidates.Min(s => s.FinalScore);
+        var hardestMax = (int)hardestCandidates.Max(s => s.FinalScore);
+        report.AppendLine($"Hardest Candidates (Scores {hardestMin}-{hardestMax})");
+        report.AppendLine("These projects have high coupling, complexity, or technical debt, requiring");
+        report.AppendLine("significant refactoring effort.");
+        report.AppendLine();
+
+        for (int i = 0; i < hardestCandidates.Count; i++)
+        {
+            var score = hardestCandidates[i];
+            var rank = i + 1;
+            var couplingScore = score.CouplingMetric?.NormalizedScore ?? 0;
+            var complexityScore = score.ComplexityMetric.NormalizedScore;
+            var techDebtScore = score.TechDebtMetric.NormalizedScore;
+
+            var couplingLabel = GetComplexityLabel(couplingScore, "coupling");
+            var complexityLabel = GetComplexityLabel(complexityScore, "complexity");
+            var techDebtText = $"Tech debt ({techDebtScore:F0})";
+
+            report.AppendLine($" {rank,2}. {score.ProjectName} (Score: {score.FinalScore:F0}) - {couplingLabel}, {complexityLabel}, {techDebtText}");
+        }
+
+        // Section closing
+        report.AppendLine();
+        report.AppendLine(new string('=', ReportWidth));
+        report.AppendLine();
+    }
+
+    /// <summary>
+    /// Formats external API count with grammatical correctness.
+    /// </summary>
+    /// <param name="count">The number of external APIs.</param>
+    /// <returns>Formatted string: "no external APIs", "1 API", or "N APIs".</returns>
+    private static string FormatExternalApis(int count)
+    {
+        return count switch
+        {
+            0 => "no external APIs",
+            1 => "1 API",
+            _ => $"{count} APIs"
+        };
+    }
+
+    /// <summary>
+    /// Gets a complexity label for a metric value.
+    /// </summary>
+    /// <param name="metric">The metric value (0-100 scale).</param>
+    /// <param name="metricName">The name of the metric (e.g., "coupling", "complexity").</param>
+    /// <returns>Formatted string: "High coupling (75)", "Moderate complexity (45)", etc.</returns>
+    private static string GetComplexityLabel(double metric, string metricName)
+    {
+        var level = metric switch
+        {
+            >= 60 => "High",
+            >= 30 => "Moderate",
+            _ => "Low"
+        };
+        return $"{level} {metricName} ({metric:F0})";
     }
 
     /// <summary>
