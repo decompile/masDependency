@@ -3,6 +3,7 @@ namespace MasDependencyMap.Core.Tests.Reporting;
 using System.Text;
 using FluentAssertions;
 using MasDependencyMap.Core.Configuration;
+using MasDependencyMap.Core.CycleAnalysis;
 using MasDependencyMap.Core.DependencyAnalysis;
 using MasDependencyMap.Core.Reporting;
 using Microsoft.Extensions.Logging;
@@ -324,6 +325,446 @@ public class TextReportGeneratorTests : IDisposable
         fileName.Should().EndWith("-analysis-report.txt");
     }
 
+    // ================================================================================
+    // Story 5.2: Cycle Detection Section Tests
+    // ================================================================================
+
+    [Fact]
+    public async Task GenerateAsync_WithCycles_IncludesCycleDetectionSection()
+    {
+        // Arrange
+        var graph = CreateTestGraph(projectCount: 10);
+        var cycles = CreateTestCycles(cycleCount: 3, avgSize: 4);
+        var outputDir = CreateTempDirectory();
+
+        // Act
+        var reportPath = await _generator.GenerateAsync(graph, outputDir, "TestSolution", cycles: cycles);
+
+        // Assert
+        var content = await File.ReadAllTextAsync(reportPath);
+        content.Should().Contain("CYCLE DETECTION");
+        content.Should().Contain("Circular Dependency Chains:");
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WithCycles_ShowsCorrectCycleCount()
+    {
+        // Arrange
+        var graph = CreateTestGraph(projectCount: 20);
+        var cycles = CreateTestCycles(cycleCount: 12, avgSize: 5);
+        var outputDir = CreateTempDirectory();
+
+        // Act
+        var reportPath = await _generator.GenerateAsync(graph, outputDir, "TestSolution", cycles: cycles);
+
+        // Assert
+        var content = await File.ReadAllTextAsync(reportPath);
+        content.Should().Contain("Circular Dependency Chains: 12");
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WithCycles_ShowsProjectParticipationPercentage()
+    {
+        // Arrange
+        var graph = CreateTestGraph(projectCount: 73);
+        var cycles = new List<CycleInfo>
+        {
+            new CycleInfo(1, new List<ProjectNode>
+            {
+                new ProjectNode { ProjectName = "Project1", ProjectPath = "C:\\p\\Project1.csproj", SolutionName = "S1", TargetFramework = "net8.0" },
+                new ProjectNode { ProjectName = "Project2", ProjectPath = "C:\\p\\Project2.csproj", SolutionName = "S1", TargetFramework = "net8.0" },
+                new ProjectNode { ProjectName = "Project3", ProjectPath = "C:\\p\\Project3.csproj", SolutionName = "S1", TargetFramework = "net8.0" }
+            }),
+            new CycleInfo(2, new List<ProjectNode>
+            {
+                new ProjectNode { ProjectName = "Project4", ProjectPath = "C:\\p\\Project4.csproj", SolutionName = "S1", TargetFramework = "net8.0" },
+                new ProjectNode { ProjectName = "Project5", ProjectPath = "C:\\p\\Project5.csproj", SolutionName = "S1", TargetFramework = "net8.0" }
+            }),
+            new CycleInfo(3, new List<ProjectNode>
+            {
+                new ProjectNode { ProjectName = "Project1", ProjectPath = "C:\\p\\Project1.csproj", SolutionName = "S1", TargetFramework = "net8.0" },
+                new ProjectNode { ProjectName = "Project6", ProjectPath = "C:\\p\\Project6.csproj", SolutionName = "S1", TargetFramework = "net8.0" },
+                new ProjectNode { ProjectName = "Project7", ProjectPath = "C:\\p\\Project7.csproj", SolutionName = "S1", TargetFramework = "net8.0" }
+            })
+        };
+        // Unique projects in cycles: 1,2,3,4,5,6,7 = 7 projects
+        // Percentage: 7/73 * 100 = 9.6%
+        var outputDir = CreateTempDirectory();
+
+        // Act
+        var reportPath = await _generator.GenerateAsync(graph, outputDir, "TestSolution", cycles: cycles);
+
+        // Assert
+        var content = await File.ReadAllTextAsync(reportPath);
+        content.Should().Contain("Projects in Cycles: 7 (9.6%)");
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WithCycles_ShowsLargestCycleSize()
+    {
+        // Arrange
+        var graph = CreateTestGraph(projectCount: 20);
+        var cycles = new List<CycleInfo>
+        {
+            new CycleInfo(1, new List<ProjectNode>
+            {
+                new ProjectNode { ProjectName = "P1", ProjectPath = "C:\\p\\P1.csproj", SolutionName = "S1", TargetFramework = "net8.0" },
+                new ProjectNode { ProjectName = "P2", ProjectPath = "C:\\p\\P2.csproj", SolutionName = "S1", TargetFramework = "net8.0" },
+                new ProjectNode { ProjectName = "P3", ProjectPath = "C:\\p\\P3.csproj", SolutionName = "S1", TargetFramework = "net8.0" }
+            }),
+            new CycleInfo(2, new List<ProjectNode>
+            {
+                new ProjectNode { ProjectName = "P4", ProjectPath = "C:\\p\\P4.csproj", SolutionName = "S1", TargetFramework = "net8.0" },
+                new ProjectNode { ProjectName = "P5", ProjectPath = "C:\\p\\P5.csproj", SolutionName = "S1", TargetFramework = "net8.0" },
+                new ProjectNode { ProjectName = "P6", ProjectPath = "C:\\p\\P6.csproj", SolutionName = "S1", TargetFramework = "net8.0" },
+                new ProjectNode { ProjectName = "P7", ProjectPath = "C:\\p\\P7.csproj", SolutionName = "S1", TargetFramework = "net8.0" },
+                new ProjectNode { ProjectName = "P8", ProjectPath = "C:\\p\\P8.csproj", SolutionName = "S1", TargetFramework = "net8.0" }
+            }),
+            new CycleInfo(3, new List<ProjectNode>
+            {
+                new ProjectNode { ProjectName = "P9", ProjectPath = "C:\\p\\P9.csproj", SolutionName = "S1", TargetFramework = "net8.0" },
+                new ProjectNode { ProjectName = "P10", ProjectPath = "C:\\p\\P10.csproj", SolutionName = "S1", TargetFramework = "net8.0" }
+            })
+        };
+        var outputDir = CreateTempDirectory();
+
+        // Act
+        var reportPath = await _generator.GenerateAsync(graph, outputDir, "TestSolution", cycles: cycles);
+
+        // Assert
+        var content = await File.ReadAllTextAsync(reportPath);
+        content.Should().Contain("Largest Cycle Size: 5 projects");
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WithCycles_ListsAllCyclesWithProjects()
+    {
+        // Arrange
+        var graph = CreateTestGraph(projectCount: 10);
+        var cycles = new List<CycleInfo>
+        {
+            new CycleInfo(1, new List<ProjectNode>
+            {
+                new ProjectNode { ProjectName = "PaymentService", ProjectPath = "C:\\p\\PaymentService.csproj", SolutionName = "S1", TargetFramework = "net8.0" },
+                new ProjectNode { ProjectName = "OrderManagement", ProjectPath = "C:\\p\\OrderManagement.csproj", SolutionName = "S1", TargetFramework = "net8.0" },
+                new ProjectNode { ProjectName = "CustomerService", ProjectPath = "C:\\p\\CustomerService.csproj", SolutionName = "S1", TargetFramework = "net8.0" }
+            }),
+            new CycleInfo(2, new List<ProjectNode>
+            {
+                new ProjectNode { ProjectName = "UserAuth", ProjectPath = "C:\\p\\UserAuth.csproj", SolutionName = "S1", TargetFramework = "net8.0" },
+                new ProjectNode { ProjectName = "ProfileMgmt", ProjectPath = "C:\\p\\ProfileMgmt.csproj", SolutionName = "S1", TargetFramework = "net8.0" }
+            })
+        };
+        var outputDir = CreateTempDirectory();
+
+        // Act
+        var reportPath = await _generator.GenerateAsync(graph, outputDir, "TestSolution", cycles: cycles);
+
+        // Assert
+        var content = await File.ReadAllTextAsync(reportPath);
+
+        // Verify cycle headers
+        content.Should().Contain("Cycle 1: 3 projects");
+        content.Should().Contain("Cycle 2: 2 projects");
+
+        // Verify project names
+        content.Should().Contain("  - PaymentService");
+        content.Should().Contain("  - OrderManagement");
+        content.Should().Contain("  - CustomerService");
+        content.Should().Contain("  - UserAuth");
+        content.Should().Contain("  - ProfileMgmt");
+
+        // Verify detailed section header
+        content.Should().Contain("Detailed Cycle Information:");
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WithNullCycles_DoesNotIncludeCycleSection()
+    {
+        // Arrange
+        var graph = CreateTestGraph(projectCount: 10);
+        var outputDir = CreateTempDirectory();
+
+        // Act
+        var reportPath = await _generator.GenerateAsync(graph, outputDir, "TestSolution", cycles: null);
+
+        // Assert
+        var content = await File.ReadAllTextAsync(reportPath);
+        content.Should().NotContain("CYCLE DETECTION");
+        content.Should().NotContain("Circular Dependency Chains:");
+
+        // Should still have Story 5.1 sections
+        content.Should().Contain("DEPENDENCY OVERVIEW");
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WithEmptyCycles_ShowsNoCyclesMessage()
+    {
+        // Arrange
+        var graph = CreateTestGraph(projectCount: 10);
+        var cycles = new List<CycleInfo>();  // Empty list
+        var outputDir = CreateTempDirectory();
+
+        // Act
+        var reportPath = await _generator.GenerateAsync(graph, outputDir, "TestSolution", cycles: cycles);
+
+        // Assert
+        var content = await File.ReadAllTextAsync(reportPath);
+        content.Should().Contain("CYCLE DETECTION");
+        content.Should().Contain("No circular dependencies detected");
+
+        // Should NOT contain statistics
+        content.Should().NotContain("Circular Dependency Chains:");
+        content.Should().NotContain("Projects in Cycles:");
+        content.Should().NotContain("Largest Cycle Size:");
+    }
+
+    [Fact]
+    public async Task GenerateAsync_CycleSection_AppearsAfterDependencyOverview()
+    {
+        // Arrange
+        var graph = CreateTestGraph(projectCount: 10);
+        var cycles = CreateTestCycles(cycleCount: 2);
+        var outputDir = CreateTempDirectory();
+
+        // Act
+        var reportPath = await _generator.GenerateAsync(graph, outputDir, "TestSolution", cycles: cycles);
+
+        // Assert
+        var content = await File.ReadAllTextAsync(reportPath);
+
+        var dependencyOverviewIndex = content.IndexOf("DEPENDENCY OVERVIEW");
+        var cycleDetectionIndex = content.IndexOf("CYCLE DETECTION");
+
+        dependencyOverviewIndex.Should().BeGreaterThan(0, "Dependency Overview should exist");
+        cycleDetectionIndex.Should().BeGreaterThan(dependencyOverviewIndex,
+            "Cycle Detection should appear after Dependency Overview");
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WithMultipleCycles_FormatsCorrectlyWithSeparators()
+    {
+        // Arrange
+        var graph = CreateTestGraph(projectCount: 20);
+        var cycles = CreateTestCycles(cycleCount: 5, avgSize: 4);
+        var outputDir = CreateTempDirectory();
+
+        // Act
+        var reportPath = await _generator.GenerateAsync(graph, outputDir, "TestSolution", cycles: cycles);
+
+        // Assert
+        var content = await File.ReadAllTextAsync(reportPath);
+
+        // Verify section separators (80 '=' characters)
+        var separator = new string('=', 80);
+        content.Should().Contain(separator);
+
+        // Verify subsection separator (80 '-' characters)
+        var subseparator = new string('-', 80);
+        content.Should().Contain(subseparator);
+
+        // Verify cycle count in header
+        content.Should().Contain("Circular Dependency Chains: 5");
+    }
+
+    // ================================================================================
+    // Code Review Fix: Integration and Edge Case Tests
+    // ================================================================================
+
+    [Fact]
+    public async Task GenerateAsync_WithRealCycleDetector_ProducesCorrectReport()
+    {
+        // Integration test: Use real TarjanCycleDetector from Epic 3
+        // Arrange
+        var graph = new DependencyGraph();
+
+        // Create a graph with a real circular dependency: A -> B -> C -> A
+        var projectA = new ProjectNode
+        {
+            ProjectName = "ProjectA",
+            ProjectPath = "C:\\projects\\ProjectA.csproj",
+            SolutionName = "Solution1",
+            TargetFramework = "net8.0"
+        };
+        var projectB = new ProjectNode
+        {
+            ProjectName = "ProjectB",
+            ProjectPath = "C:\\projects\\ProjectB.csproj",
+            SolutionName = "Solution1",
+            TargetFramework = "net8.0"
+        };
+        var projectC = new ProjectNode
+        {
+            ProjectName = "ProjectC",
+            ProjectPath = "C:\\projects\\ProjectC.csproj",
+            SolutionName = "Solution1",
+            TargetFramework = "net8.0"
+        };
+
+        graph.AddVertex(projectA);
+        graph.AddVertex(projectB);
+        graph.AddVertex(projectC);
+
+        // Create circular dependency: A -> B -> C -> A
+        graph.AddEdge(new DependencyEdge
+        {
+            Source = projectA,
+            Target = projectB,
+            DependencyType = DependencyType.ProjectReference
+        });
+        graph.AddEdge(new DependencyEdge
+        {
+            Source = projectB,
+            Target = projectC,
+            DependencyType = DependencyType.ProjectReference
+        });
+        graph.AddEdge(new DependencyEdge
+        {
+            Source = projectC,
+            Target = projectA,
+            DependencyType = DependencyType.ProjectReference
+        });
+
+        // Use real cycle detector from Epic 3 with required dependencies
+        var cycleStatisticsCalculator = new CycleStatisticsCalculator(
+            NullLogger<CycleStatisticsCalculator>.Instance);
+        var cycleDetector = new TarjanCycleDetector(
+            NullLogger<TarjanCycleDetector>.Instance,
+            cycleStatisticsCalculator);
+        var cycles = await cycleDetector.DetectCyclesAsync(graph);
+
+        var outputDir = CreateTempDirectory();
+
+        // Act
+        var reportPath = await _generator.GenerateAsync(graph, outputDir, "TestSolution", cycles: cycles);
+
+        // Assert
+        var content = await File.ReadAllTextAsync(reportPath);
+
+        // Verify cycle was detected by real detector
+        cycles.Should().HaveCount(1, "real detector should find 1 cycle");
+        cycles[0].Projects.Should().HaveCount(3, "cycle should contain 3 projects");
+
+        // Verify report contains cycle information
+        content.Should().Contain("CYCLE DETECTION");
+        content.Should().Contain("Circular Dependency Chains: 1");
+        content.Should().Contain("Cycle 1: 3 projects");
+        content.Should().Contain("ProjectA");
+        content.Should().Contain("ProjectB");
+        content.Should().Contain("ProjectC");
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WithEmptyGraphButCycles_HandlesGracefully()
+    {
+        // Edge case: 0 projects but cycles provided (logically impossible but defensive)
+        // Tests the _totalProjects > 0 check to prevent division by zero
+        // Arrange
+        var emptyGraph = new DependencyGraph();  // 0 projects
+        var cycles = CreateTestCycles(cycleCount: 1);  // Impossible scenario
+        var outputDir = CreateTempDirectory();
+
+        // Act
+        var reportPath = await _generator.GenerateAsync(emptyGraph, outputDir, "EmptySolution", cycles: cycles);
+
+        // Assert - Should not crash, should show 0.0%
+        var content = await File.ReadAllTextAsync(reportPath);
+        content.Should().Contain("Total Projects: 0");
+        content.Should().Contain("CYCLE DETECTION");
+        content.Should().Contain("Projects in Cycles:").And.Contain("(0.0%)");
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WithNullProjectNameInCycle_HandlesWithoutCrashing()
+    {
+        // Edge case: CycleInfo with ProjectNode having null ProjectName
+        // Documents current behavior: LINQ Select includes null in distinct count
+        // Note: This counts null as a distinct "project" which may not be ideal,
+        // but prevents crashes. Better would be to filter nulls or throw ArgumentException.
+
+        // Arrange
+        var graph = CreateTestGraph(projectCount: 5);
+        var cycles = new List<CycleInfo>
+        {
+            new CycleInfo(1, new List<ProjectNode>
+            {
+                new ProjectNode
+                {
+                    ProjectName = null!,  // Null project name - edge case
+                    ProjectPath = "C:\\test.csproj",
+                    SolutionName = "Solution1",
+                    TargetFramework = "net8.0"
+                },
+                new ProjectNode
+                {
+                    ProjectName = "ValidProject",
+                    ProjectPath = "C:\\valid.csproj",
+                    SolutionName = "Solution1",
+                    TargetFramework = "net8.0"
+                }
+            })
+        };
+        var outputDir = CreateTempDirectory();
+
+        // Act - Should not throw exception (defensive behavior)
+        var reportPath = await _generator.GenerateAsync(graph, outputDir, "TestSolution", cycles: cycles);
+
+        // Assert - Report generated successfully despite null project name
+        File.Exists(reportPath).Should().BeTrue("report should be generated without crashing");
+
+        var content = await File.ReadAllTextAsync(reportPath);
+        content.Should().Contain("CYCLE DETECTION");
+        content.Should().Contain("Projects in Cycles: 2");  // Counts both null and "ValidProject"
+
+        // Document limitation: null is counted as a distinct project
+        // This is acceptable defensive behavior - doesn't crash, though semantically imperfect
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WithVeryLargeCycle_FormatsCorrectlyAndPerformsWell()
+    {
+        // Verify large cycles (100+ projects) format correctly and complete within performance budget
+        // Arrange
+        var graph = CreateTestGraph(projectCount: 200);
+
+        var largeProjects = new List<ProjectNode>();
+        for (int i = 0; i < 150; i++)
+        {
+            largeProjects.Add(new ProjectNode
+            {
+                ProjectName = $"LargeProject{i:D3}",  // Zero-padded for consistent formatting
+                ProjectPath = $"C:\\projects\\LargeProject{i:D3}.csproj",
+                SolutionName = "LargeSolution",
+                TargetFramework = "net8.0"
+            });
+        }
+
+        var cycles = new List<CycleInfo>
+        {
+            new CycleInfo(1, largeProjects)
+        };
+
+        var outputDir = CreateTempDirectory();
+
+        // Act
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var reportPath = await _generator.GenerateAsync(graph, outputDir, "LargeSolution", cycles: cycles);
+        stopwatch.Stop();
+
+        // Assert
+        stopwatch.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(10),
+            "large cycle report should complete within 10 second performance budget");
+
+        var content = await File.ReadAllTextAsync(reportPath);
+        content.Should().Contain("Largest Cycle Size: 150 projects");
+        content.Should().Contain("Cycle 1: 150 projects");
+        content.Should().Contain("Projects in Cycles: 150");  // All 150 are in the single cycle
+
+        // Verify all projects are listed
+        content.Should().Contain("LargeProject000");
+        content.Should().Contain("LargeProject149");
+    }
+
     // Helper: Create temp directory
     private string CreateTempDirectory()
     {
@@ -496,5 +937,32 @@ public class TextReportGeneratorTests : IDisposable
         }
 
         return graph;
+    }
+
+    // Helper: Create test cycles with configurable size
+    private IReadOnlyList<CycleInfo> CreateTestCycles(int cycleCount = 3, int avgSize = 4)
+    {
+        var cycles = new List<CycleInfo>();
+
+        for (int i = 0; i < cycleCount; i++)
+        {
+            var projects = new List<ProjectNode>();
+            var size = avgSize + (i % 2 == 0 ? 1 : -1);  // Vary size slightly
+
+            for (int j = 0; j < size; j++)
+            {
+                projects.Add(new ProjectNode
+                {
+                    ProjectName = $"Project{i * avgSize + j}",
+                    ProjectPath = $"C:\\projects\\Project{i * avgSize + j}.csproj",
+                    SolutionName = "Solution1",
+                    TargetFramework = "net8.0"
+                });
+            }
+
+            cycles.Add(new CycleInfo(i + 1, projects));
+        }
+
+        return cycles;
     }
 }

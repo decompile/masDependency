@@ -17,6 +17,7 @@ public sealed class TextReportGenerator : ITextReportGenerator
     private readonly ILogger<TextReportGenerator> _logger;
     private readonly FilterConfiguration _filterConfiguration;
     private const int ReportWidth = 80;  // Standard terminal width for formatting
+    private int _totalProjects;  // Used for cycle participation percentage calculation
 
     /// <summary>
     /// Initializes a new instance of the TextReportGenerator class.
@@ -56,14 +57,22 @@ public sealed class TextReportGenerator : ITextReportGenerator
 
         var startTime = DateTime.UtcNow;
 
+        // Store total projects for use in helper methods
+        _totalProjects = graph.VertexCount;
+
         // Build report content
         var report = new StringBuilder(capacity: 4096);  // Pre-allocate for performance
 
         AppendHeader(report, solutionName, graph);
         AppendDependencyOverview(report, graph);
 
+        // Story 5.2: Cycle detection section
+        if (cycles != null)
+        {
+            AppendCycleDetection(report, cycles);
+        }
+
         // Future stories will add more sections here
-        // Story 5.2: AppendCycleDetection(report, cycles);
         // Story 5.3: AppendExtractionScores(report, extractionScores);
         // Story 5.4: AppendRecommendations(report, recommendations);
 
@@ -141,6 +150,75 @@ public sealed class TextReportGenerator : ITextReportGenerator
             report.AppendLine();
         }
 
+        report.AppendLine(new string('=', ReportWidth));
+        report.AppendLine();
+    }
+
+    /// <summary>
+    /// Appends the cycle detection section showing circular dependency analysis.
+    /// Displays total cycles, project participation statistics, largest cycle, and detailed cycle listings.
+    /// </summary>
+    /// <param name="report">The StringBuilder to append to.</param>
+    /// <param name="cycles">The list of detected cycles. Empty list shows "no cycles" message.</param>
+    private void AppendCycleDetection(StringBuilder report, IReadOnlyList<CycleInfo> cycles)
+    {
+        report.AppendLine("CYCLE DETECTION");
+        report.AppendLine(new string('=', ReportWidth));
+        report.AppendLine();
+
+        // Handle empty cycles list - no circular dependencies detected
+        if (cycles.Count == 0)
+        {
+            report.AppendLine("No circular dependencies detected");
+            report.AppendLine();
+            report.AppendLine(new string('=', ReportWidth));
+            report.AppendLine();
+
+            _logger.LogDebug("No cycles detected, showing no-cycles message");
+            return;
+        }
+
+        // Calculate statistics
+        var totalCycles = cycles.Count;
+        var uniqueProjects = cycles.SelectMany(c => c.Projects).Select(p => p.ProjectName).Distinct().Count();
+        var largestCycleSize = cycles.Max(c => c.Projects.Count);
+        var participationPercentage = _totalProjects > 0 ? (uniqueProjects * 100.0 / _totalProjects) : 0.0;
+
+        _logger.LogDebug(
+            "Appending cycle detection section: {CycleCount} cycles, {UniqueProjects} unique projects",
+            cycles.Count,
+            uniqueProjects);
+
+        // Display summary statistics
+        report.AppendLine($"Circular Dependency Chains: {totalCycles:N0}");
+        report.AppendLine($"Projects in Cycles: {uniqueProjects:N0} ({participationPercentage:F1}%)");
+        report.AppendLine($"Largest Cycle Size: {largestCycleSize} projects");
+        report.AppendLine();
+
+        // Display detailed cycle information
+        report.AppendLine("Detailed Cycle Information:");
+        report.AppendLine(new string('-', ReportWidth));
+        report.AppendLine();
+
+        for (int i = 0; i < cycles.Count; i++)
+        {
+            var cycle = cycles[i];
+            report.AppendLine($"Cycle {i + 1}: {cycle.Projects.Count} projects");
+
+            foreach (var project in cycle.Projects)
+            {
+                report.AppendLine($"  - {project.ProjectName}");
+            }
+
+            // Add blank line between cycles (but not after last cycle)
+            if (i < cycles.Count - 1)
+            {
+                report.AppendLine();
+            }
+        }
+
+        // Section closing
+        report.AppendLine();
         report.AppendLine(new string('=', ReportWidth));
         report.AppendLine();
     }

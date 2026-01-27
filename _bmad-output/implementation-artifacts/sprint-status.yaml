@@ -87,7 +87,7 @@ development_status:
 
   epic-5: in-progress
   5-1-implement-text-report-generator-with-summary-statistics: done
-  5-2-add-cycle-detection-section-to-text-reports: backlog
+  5-2-add-cycle-detection-section-to-text-reports: done
   5-3-add-extraction-difficulty-scoring-section-to-text-reports: backlog
   5-4-add-cycle-breaking-recommendations-to-text-reports: backlog
   5-5-implement-csv-export-for-extraction-difficulty-scores: backlog

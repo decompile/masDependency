@@ -108,3 +108,5 @@ temp/
 # Tool output artifacts
 output/
 samples/sample-output/
+test-output/
+test-*/
