@@ -156,6 +156,7 @@ public class Program
 
         // Epic 5: Reporting Services
         services.TryAddSingleton<ITextReportGenerator, TextReportGenerator>();
+        services.TryAddSingleton<ICsvExporter, CsvExporter>();
 
         // Register FilterConfiguration with validation
         services
