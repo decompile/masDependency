@@ -63,10 +63,10 @@ public class DotGenerator : IDotGenerator
         Directory.CreateDirectory(absoluteOutputDir);
         var filePath = Path.Combine(absoluteOutputDir, fileName);
 
-        // Write to file
+        // Write to file (UTF-8 without BOM for Graphviz compatibility)
         try
         {
-            await File.WriteAllTextAsync(filePath, dotContent, Encoding.UTF8, cancellationToken)
+            await File.WriteAllTextAsync(filePath, dotContent, new UTF8Encoding(false), cancellationToken)
                 .ConfigureAwait(false);
 
             var fileSize = new FileInfo(filePath).Length;
