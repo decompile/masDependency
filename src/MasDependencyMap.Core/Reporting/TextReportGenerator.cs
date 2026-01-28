@@ -1,12 +1,15 @@
 namespace MasDependencyMap.Core.Reporting;
 
 using System.Text;
+using System.Text.RegularExpressions;
 using MasDependencyMap.Core.Configuration;
 using MasDependencyMap.Core.DependencyAnalysis;
 using MasDependencyMap.Core.CycleAnalysis;
 using MasDependencyMap.Core.ExtractionScoring;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Spectre.Console;
+using Spectre.Console.Testing;
 
 /// <summary>
 /// Generates comprehensive text reports from solution dependency analysis results.
@@ -16,6 +19,7 @@ public sealed class TextReportGenerator : ITextReportGenerator
 {
     private readonly ILogger<TextReportGenerator> _logger;
     private readonly FilterConfiguration _filterConfiguration;
+    private readonly IAnsiConsole _ansiConsole;
     private const int ReportWidth = 80;  // Standard terminal width for formatting
     private int _totalProjects;  // Used for cycle participation percentage calculation
 
@@ -24,13 +28,16 @@ public sealed class TextReportGenerator : ITextReportGenerator
     /// </summary>
     /// <param name="logger">Logger for structured logging. Must not be null.</param>
     /// <param name="filterConfiguration">Filter configuration for framework pattern detection. Must not be null.</param>
-    /// <exception cref="ArgumentNullException">When logger or filterConfiguration is null.</exception>
+    /// <param name="ansiConsole">Spectre.Console instance for table rendering. Injected via DI to enable testing. Must not be null.</param>
+    /// <exception cref="ArgumentNullException">When logger, filterConfiguration, or ansiConsole is null.</exception>
     public TextReportGenerator(
         ILogger<TextReportGenerator> logger,
-        IOptions<FilterConfiguration> filterConfiguration)
+        IOptions<FilterConfiguration> filterConfiguration,
+        IAnsiConsole ansiConsole)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _filterConfiguration = filterConfiguration?.Value ?? throw new ArgumentNullException(nameof(filterConfiguration));
+        _ansiConsole = ansiConsole ?? throw new ArgumentNullException(nameof(ansiConsole));
     }
 
     /// <inheritdoc />
@@ -220,22 +227,36 @@ public sealed class TextReportGenerator : ITextReportGenerator
         report.AppendLine(new string('-', ReportWidth));
         report.AppendLine();
 
-        for (int i = 0; i < cycles.Count; i++)
+        // Create table for cycle details
+        var cycleTable = new Table();
+        cycleTable.Border(TableBorder.Ascii);
+        cycleTable.AddColumn(new TableColumn("Cycle ID").RightAligned());
+        cycleTable.AddColumn(new TableColumn("Size").RightAligned());
+        cycleTable.AddColumn("Projects");
+        cycleTable.AddColumn("Suggested Break");
+
+        foreach (var cycle in cycles)
         {
-            var cycle = cycles[i];
-            report.AppendLine($"Cycle {i + 1}: {cycle.Projects.Count} projects");
+            var projectNames = string.Join(", ", cycle.Projects.Select(p => p.ProjectName));
 
-            foreach (var project in cycle.Projects)
+            // Get suggested break from weak coupling edges
+            var suggestedBreak = "N/A";
+            if (cycle.WeakCouplingEdges.Count > 0)
             {
-                report.AppendLine($"  - {project.ProjectName}");
+                var weakEdge = cycle.WeakCouplingEdges[0];
+                suggestedBreak = $"{weakEdge.Source.ProjectName} → {weakEdge.Target.ProjectName}";
             }
 
-            // Add blank line between cycles (but not after last cycle)
-            if (i < cycles.Count - 1)
-            {
-                report.AppendLine();
-            }
+            cycleTable.AddRow(
+                cycle.CycleId.ToString(),
+                cycle.CycleSize.ToString(),
+                projectNames,
+                suggestedBreak);
         }
+
+        // Render table to plain text and append to report
+        var cycleTableText = RenderTableToPlainText(cycleTable);
+        report.Append(cycleTableText);
 
         // Section closing
         report.AppendLine();
@@ -275,6 +296,16 @@ public sealed class TextReportGenerator : ITextReportGenerator
         report.AppendLine("candidates for extraction.");
         report.AppendLine();
 
+        // Create table for easiest candidates
+        var easiestTable = new Table();
+        easiestTable.Border(TableBorder.Ascii);
+        easiestTable.AddColumn(new TableColumn("Rank").RightAligned());
+        easiestTable.AddColumn("Project Name");
+        easiestTable.AddColumn(new TableColumn("Score").RightAligned());
+        easiestTable.AddColumn(new TableColumn("Incoming").RightAligned());
+        easiestTable.AddColumn(new TableColumn("Outgoing").RightAligned());
+        easiestTable.AddColumn(new TableColumn("APIs").RightAligned());
+
         for (int i = 0; i < easiestCandidates.Count; i++)
         {
             var score = easiestCandidates[i];
@@ -283,13 +314,18 @@ public sealed class TextReportGenerator : ITextReportGenerator
             var outgoingRefs = score.CouplingMetric?.OutgoingCount ?? 0;
             var externalApis = score.ExternalApiMetric.EndpointCount;
 
-            var incomingText = $"{incomingRefs} incoming";
-            var outgoingText = $"{outgoingRefs} outgoing";
-            var apisText = FormatExternalApis(externalApis);
-
-            report.AppendLine($" {rank,2}. {score.ProjectName} (Score: {score.FinalScore:F0}) - {incomingText}, {outgoingText}, {apisText}");
+            easiestTable.AddRow(
+                rank.ToString(),
+                score.ProjectName,
+                $"{score.FinalScore:F0}",
+                incomingRefs.ToString(),
+                outgoingRefs.ToString(),
+                externalApis.ToString());
         }
 
+        // Render table to plain text and append to report
+        var easiestTableText = RenderTableToPlainText(easiestTable);
+        report.Append(easiestTableText);
         report.AppendLine();
 
         // Bottom 10 hardest candidates (highest scores)
@@ -306,6 +342,16 @@ public sealed class TextReportGenerator : ITextReportGenerator
         report.AppendLine("significant refactoring effort.");
         report.AppendLine();
 
+        // Create table for hardest candidates
+        var hardestTable = new Table();
+        hardestTable.Border(TableBorder.Ascii);
+        hardestTable.AddColumn(new TableColumn("Rank").RightAligned());
+        hardestTable.AddColumn("Project Name");
+        hardestTable.AddColumn(new TableColumn("Score").RightAligned());
+        hardestTable.AddColumn(new TableColumn("Coupling").RightAligned());
+        hardestTable.AddColumn(new TableColumn("Complexity").RightAligned());
+        hardestTable.AddColumn(new TableColumn("Tech Debt").RightAligned());
+
         for (int i = 0; i < hardestCandidates.Count; i++)
         {
             var score = hardestCandidates[i];
@@ -314,17 +360,43 @@ public sealed class TextReportGenerator : ITextReportGenerator
             var complexityScore = score.ComplexityMetric.NormalizedScore;
             var techDebtScore = score.TechDebtMetric.NormalizedScore;
 
-            var couplingLabel = GetComplexityLabel(couplingScore, "coupling");
-            var complexityLabel = GetComplexityLabel(complexityScore, "complexity");
-            var techDebtText = $"Tech debt ({techDebtScore:F0})";
-
-            report.AppendLine($" {rank,2}. {score.ProjectName} (Score: {score.FinalScore:F0}) - {couplingLabel}, {complexityLabel}, {techDebtText}");
+            hardestTable.AddRow(
+                rank.ToString(),
+                score.ProjectName,
+                $"{score.FinalScore:F0}",
+                $"{couplingScore:F0}",
+                $"{complexityScore:F0}",
+                $"{techDebtScore:F0}");
         }
+
+        // Render table to plain text and append to report
+        var hardestTableText = RenderTableToPlainText(hardestTable);
+        report.Append(hardestTableText);
 
         // Section closing
         report.AppendLine();
         report.AppendLine(new string('=', ReportWidth));
         report.AppendLine();
+    }
+
+    /// <summary>
+    /// Renders a Spectre.Console table to plain text for file output.
+    /// Uses TestConsole to capture output and strips ANSI codes to produce plain text.
+    /// </summary>
+    /// <param name="table">The table to render.</param>
+    /// <returns>Plain text representation of the table without ANSI codes.</returns>
+    private static string RenderTableToPlainText(Table table)
+    {
+        var testConsole = new TestConsole();
+
+        testConsole.Write(table);
+        var output = testConsole.Output;
+
+        // Strip ANSI escape codes using regex
+        // Pattern matches ANSI escape sequences: ESC [ ... m
+        var plainText = Regex.Replace(output, @"\x1B\[[^@-~]*[@-~]", string.Empty);
+
+        return plainText;
     }
 
     /// <summary>
@@ -471,17 +543,29 @@ public sealed class TextReportGenerator : ITextReportGenerator
         // Take top 5 recommendations (already sorted by Rank from Epic 3 RecommendationGenerator)
         var topRecommendations = recommendations.Take(5).ToList();
 
-        for (int i = 0; i < topRecommendations.Count; i++)
-        {
-            var recommendation = topRecommendations[i];
-            var rank = recommendation.Rank;
-            var sourceProject = recommendation.SourceProject.ProjectName;
-            var targetProject = recommendation.TargetProject.ProjectName;
-            var couplingText = FormatCouplingCalls(recommendation.CouplingScore);
-            var rationale = recommendation.Rationale;
+        // Create table for recommendations
+        var recommendationsTable = new Table();
+        recommendationsTable.Border(TableBorder.Ascii);
+        recommendationsTable.AddColumn(new TableColumn("Rank").RightAligned());
+        recommendationsTable.AddColumn("Break Edge");
+        recommendationsTable.AddColumn(new TableColumn("Coupling").RightAligned());
+        recommendationsTable.AddColumn("Rationale");
 
-            report.AppendLine($" {rank}. Break: {sourceProject} → {targetProject} (Coupling: {couplingText}) - {rationale}");
+        foreach (var recommendation in topRecommendations)
+        {
+            var breakEdge = $"{recommendation.SourceProject.ProjectName} → {recommendation.TargetProject.ProjectName}";
+            var couplingText = FormatCouplingCalls(recommendation.CouplingScore);
+
+            recommendationsTable.AddRow(
+                recommendation.Rank.ToString(),
+                breakEdge,
+                couplingText,
+                recommendation.Rationale);
         }
+
+        // Render table to plain text and append to report
+        var recommendationsTableText = RenderTableToPlainText(recommendationsTable);
+        report.Append(recommendationsTableText);
 
         // Section closing
         report.AppendLine();
