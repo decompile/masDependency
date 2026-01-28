@@ -93,7 +93,7 @@ development_status:
   5-5-implement-csv-export-for-extraction-difficulty-scores: done
   5-6-implement-csv-export-for-cycle-analysis: done
   5-7-implement-csv-export-for-dependency-matrix: done
-  5-8-format-reports-with-spectre-console-tables: completed
+  5-8-format-reports-with-spectre-console-tables: done
   epic-5-retrospective: optional
 
   epic-6: backlog

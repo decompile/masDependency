@@ -1,5 +1,9 @@
 {
   "ScoringWeights": {
+    "CouplingWeight": 0.40,
+    "ComplexityWeight": 0.30,
+    "TechDebtWeight": 0.20,
+    "ExternalExposureWeight": 0.10,
     "Coupling": 0.40,
     "Complexity": 0.30,
     "TechDebt": 0.20,

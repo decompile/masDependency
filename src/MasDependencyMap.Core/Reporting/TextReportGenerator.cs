@@ -20,6 +20,7 @@ public sealed class TextReportGenerator : ITextReportGenerator
     private readonly ILogger<TextReportGenerator> _logger;
     private readonly FilterConfiguration _filterConfiguration;
     private readonly IAnsiConsole _ansiConsole;
+    private readonly TestConsole _testConsole;  // Reused instance for performance (Story 5.8 code review fix)
     private const int ReportWidth = 80;  // Standard terminal width for formatting
     private int _totalProjects;  // Used for cycle participation percentage calculation
 
@@ -28,7 +29,7 @@ public sealed class TextReportGenerator : ITextReportGenerator
     /// </summary>
     /// <param name="logger">Logger for structured logging. Must not be null.</param>
     /// <param name="filterConfiguration">Filter configuration for framework pattern detection. Must not be null.</param>
-    /// <param name="ansiConsole">Spectre.Console instance for table rendering. Injected via DI to enable testing. Must not be null.</param>
+    /// <param name="ansiConsole">Spectre.Console instance for console table rendering (--verbose mode). Injected via DI to enable testing. Must not be null.</param>
     /// <exception cref="ArgumentNullException">When logger, filterConfiguration, or ansiConsole is null.</exception>
     public TextReportGenerator(
         ILogger<TextReportGenerator> logger,
@@ -38,6 +39,14 @@ public sealed class TextReportGenerator : ITextReportGenerator
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _filterConfiguration = filterConfiguration?.Value ?? throw new ArgumentNullException(nameof(filterConfiguration));
         _ansiConsole = ansiConsole ?? throw new ArgumentNullException(nameof(ansiConsole));
+
+        // ARCHITECTURAL NOTE: TestConsole from Spectre.Console.Testing in production code
+        // This is a pragmatic compromise to get plain-text table rendering for file output.
+        // Spectre.Console does not provide built-in ToPlainText() as of 2026.
+        // Alternatives considered: (1) Custom renderer - high complexity, (2) AnsiConsole.ToAnsi() + strip codes - same approach.
+        // TestConsole is lightweight, stable, and used by Spectre.Console's own tests.
+        // Reusing single instance for performance (avoids per-table allocation).
+        _testConsole = new TestConsole();
     }
 
     /// <inheritdoc />
@@ -48,6 +57,7 @@ public sealed class TextReportGenerator : ITextReportGenerator
         IReadOnlyList<CycleInfo>? cycles = null,
         IReadOnlyList<ExtractionScore>? extractionScores = null,
         IReadOnlyList<CycleBreakingSuggestion>? recommendations = null,
+        bool writeToConsole = false,
         CancellationToken cancellationToken = default)
     {
         // Validation
@@ -76,7 +86,7 @@ public sealed class TextReportGenerator : ITextReportGenerator
         // Story 5.2: Cycle detection section
         if (cycles != null)
         {
-            AppendCycleDetection(report, cycles);
+            AppendCycleDetection(report, cycles, writeToConsole);
         }
 
         // Story 5.3: Extraction difficulty scoring section
@@ -87,7 +97,7 @@ public sealed class TextReportGenerator : ITextReportGenerator
             {
                 throw new ArgumentException("Extraction scores list contains null items", nameof(extractionScores));
             }
-            AppendExtractionScores(report, extractionScores);
+            AppendExtractionScores(report, extractionScores, writeToConsole);
         }
 
         // Story 5.4: Cycle-breaking recommendations section
@@ -100,7 +110,7 @@ public sealed class TextReportGenerator : ITextReportGenerator
             }
             // Note: Epic 3's CycleBreakingSuggestion constructor already validates SourceProject/TargetProject are not null
 
-            AppendRecommendations(report, recommendations);
+            AppendRecommendations(report, recommendations, writeToConsole);
         }
 
         // Write to file (sanitize solution name to prevent path traversal)
@@ -187,7 +197,8 @@ public sealed class TextReportGenerator : ITextReportGenerator
     /// </summary>
     /// <param name="report">The StringBuilder to append to.</param>
     /// <param name="cycles">The list of detected cycles. Empty list shows "no cycles" message.</param>
-    private void AppendCycleDetection(StringBuilder report, IReadOnlyList<CycleInfo> cycles)
+    /// <param name="writeToConsole">When true, also writes formatted tables to console using IAnsiConsole.</param>
+    private void AppendCycleDetection(StringBuilder report, IReadOnlyList<CycleInfo> cycles, bool writeToConsole = false)
     {
         report.AppendLine("CYCLE DETECTION");
         report.AppendLine(new string('=', ReportWidth));
@@ -230,10 +241,10 @@ public sealed class TextReportGenerator : ITextReportGenerator
         // Create table for cycle details
         var cycleTable = new Table();
         cycleTable.Border(TableBorder.Ascii);
-        cycleTable.AddColumn(new TableColumn("Cycle ID").RightAligned());
-        cycleTable.AddColumn(new TableColumn("Size").RightAligned());
-        cycleTable.AddColumn("Projects");
-        cycleTable.AddColumn("Suggested Break");
+        cycleTable.AddColumn(new TableColumn("Cycle ID").RightAligned().Width(10));
+        cycleTable.AddColumn(new TableColumn("Size").RightAligned().Width(6));
+        cycleTable.AddColumn(new TableColumn("Projects").Width(35));  // Constrain to prevent overflow
+        cycleTable.AddColumn(new TableColumn("Suggested Break").Width(25));
 
         foreach (var cycle in cycles)
         {
@@ -258,6 +269,20 @@ public sealed class TextReportGenerator : ITextReportGenerator
         var cycleTableText = RenderTableToPlainText(cycleTable);
         report.Append(cycleTableText);
 
+        // Story 5.8 AC: Render to console when --verbose mode enabled
+        if (writeToConsole)
+        {
+            _ansiConsole.WriteLine();
+            _ansiConsole.MarkupLine("[bold]CYCLE DETECTION[/]");
+            _ansiConsole.WriteLine($"Circular Dependency Chains: {totalCycles:N0}");
+            _ansiConsole.WriteLine($"Projects in Cycles: {uniqueProjects:N0} ({participationPercentage:F1}%)");
+            _ansiConsole.WriteLine($"Largest Cycle Size: {largestCycleSize} projects");
+            _ansiConsole.WriteLine();
+            _ansiConsole.WriteLine("Detailed Cycle Information:");
+            _ansiConsole.Write(cycleTable);
+            _ansiConsole.WriteLine();
+        }
+
         // Section closing
         report.AppendLine();
         report.AppendLine(new string('=', ReportWidth));
@@ -270,7 +295,8 @@ public sealed class TextReportGenerator : ITextReportGenerator
     /// </summary>
     /// <param name="report">The StringBuilder to append to.</param>
     /// <param name="extractionScores">The list of extraction scores for all projects.</param>
-    private void AppendExtractionScores(StringBuilder report, IReadOnlyList<ExtractionScore> extractionScores)
+    /// <param name="writeToConsole">When true, also writes formatted tables to console using IAnsiConsole.</param>
+    private void AppendExtractionScores(StringBuilder report, IReadOnlyList<ExtractionScore> extractionScores, bool writeToConsole = false)
     {
         report.AppendLine("EXTRACTION DIFFICULTY SCORES");
         report.AppendLine(new string('=', ReportWidth));
@@ -299,12 +325,12 @@ public sealed class TextReportGenerator : ITextReportGenerator
         // Create table for easiest candidates
         var easiestTable = new Table();
         easiestTable.Border(TableBorder.Ascii);
-        easiestTable.AddColumn(new TableColumn("Rank").RightAligned());
-        easiestTable.AddColumn("Project Name");
-        easiestTable.AddColumn(new TableColumn("Score").RightAligned());
-        easiestTable.AddColumn(new TableColumn("Incoming").RightAligned());
-        easiestTable.AddColumn(new TableColumn("Outgoing").RightAligned());
-        easiestTable.AddColumn(new TableColumn("APIs").RightAligned());
+        easiestTable.AddColumn(new TableColumn("Rank").RightAligned().Width(6));
+        easiestTable.AddColumn(new TableColumn("Project Name").Width(30));  // Constrain to prevent overflow
+        easiestTable.AddColumn(new TableColumn("Score").RightAligned().Width(7));
+        easiestTable.AddColumn(new TableColumn("Incoming").RightAligned().Width(10));
+        easiestTable.AddColumn(new TableColumn("Outgoing").RightAligned().Width(10));
+        easiestTable.AddColumn(new TableColumn("APIs").RightAligned().Width(6));
 
         for (int i = 0; i < easiestCandidates.Count; i++)
         {
@@ -328,6 +354,20 @@ public sealed class TextReportGenerator : ITextReportGenerator
         report.Append(easiestTableText);
         report.AppendLine();
 
+        // Story 5.8 AC: Render to console when --verbose mode enabled
+        if (writeToConsole)
+        {
+            _ansiConsole.WriteLine();
+            _ansiConsole.MarkupLine("[bold]EXTRACTION DIFFICULTY SCORES[/]");
+            _ansiConsole.WriteLine();
+            _ansiConsole.MarkupLine($"[green]Easiest Candidates (Scores {easiestMin}-{easiestMax})[/]");
+            _ansiConsole.WriteLine("These projects have minimal dependencies and low complexity, making them ideal");
+            _ansiConsole.WriteLine("candidates for extraction.");
+            _ansiConsole.WriteLine();
+            _ansiConsole.Write(easiestTable);
+            _ansiConsole.WriteLine();
+        }
+
         // Bottom 10 hardest candidates (highest scores)
         var hardestCandidates = extractionScores
             .OrderByDescending(s => s.FinalScore)
@@ -345,12 +385,12 @@ public sealed class TextReportGenerator : ITextReportGenerator
         // Create table for hardest candidates
         var hardestTable = new Table();
         hardestTable.Border(TableBorder.Ascii);
-        hardestTable.AddColumn(new TableColumn("Rank").RightAligned());
-        hardestTable.AddColumn("Project Name");
-        hardestTable.AddColumn(new TableColumn("Score").RightAligned());
-        hardestTable.AddColumn(new TableColumn("Coupling").RightAligned());
-        hardestTable.AddColumn(new TableColumn("Complexity").RightAligned());
-        hardestTable.AddColumn(new TableColumn("Tech Debt").RightAligned());
+        hardestTable.AddColumn(new TableColumn("Rank").RightAligned().Width(6));
+        hardestTable.AddColumn(new TableColumn("Project Name").Width(30));  // Constrain to prevent overflow
+        hardestTable.AddColumn(new TableColumn("Score").RightAligned().Width(7));
+        hardestTable.AddColumn(new TableColumn("Coupling").RightAligned().Width(10));
+        hardestTable.AddColumn(new TableColumn("Complexity").RightAligned().Width(12));
+        hardestTable.AddColumn(new TableColumn("Tech Debt").RightAligned().Width(11));
 
         for (int i = 0; i < hardestCandidates.Count; i++)
         {
@@ -373,6 +413,17 @@ public sealed class TextReportGenerator : ITextReportGenerator
         var hardestTableText = RenderTableToPlainText(hardestTable);
         report.Append(hardestTableText);
 
+        // Story 5.8 AC: Render to console when --verbose mode enabled
+        if (writeToConsole)
+        {
+            _ansiConsole.MarkupLine($"[red]Hardest Candidates (Scores {hardestMin}-{hardestMax})[/]");
+            _ansiConsole.WriteLine("These projects have high coupling, complexity, or technical debt, requiring");
+            _ansiConsole.WriteLine("significant refactoring effort.");
+            _ansiConsole.WriteLine();
+            _ansiConsole.Write(hardestTable);
+            _ansiConsole.WriteLine();
+        }
+
         // Section closing
         report.AppendLine();
         report.AppendLine(new string('=', ReportWidth));
@@ -381,20 +432,25 @@ public sealed class TextReportGenerator : ITextReportGenerator
 
     /// <summary>
     /// Renders a Spectre.Console table to plain text for file output.
-    /// Uses TestConsole to capture output and strips ANSI codes to produce plain text.
+    /// Uses reusable TestConsole instance to capture output and strips ANSI codes to produce plain text.
     /// </summary>
     /// <param name="table">The table to render.</param>
     /// <returns>Plain text representation of the table without ANSI codes.</returns>
-    private static string RenderTableToPlainText(Table table)
+    /// <remarks>
+    /// Performance optimization: Reuses _testConsole instance instead of creating new instance per table.
+    /// TestConsole accumulates output, so we capture length before write to extract only current table.
+    /// </remarks>
+    private string RenderTableToPlainText(Table table)
     {
-        var testConsole = new TestConsole();
+        // Capture position before writing to extract only this table's output
+        var startLength = _testConsole.Output.Length;
 
-        testConsole.Write(table);
-        var output = testConsole.Output;
+        _testConsole.Write(table);
+        var tableOutput = _testConsole.Output.Substring(startLength);
 
         // Strip ANSI escape codes using regex
         // Pattern matches ANSI escape sequences: ESC [ ... m
-        var plainText = Regex.Replace(output, @"\x1B\[[^@-~]*[@-~]", string.Empty);
+        var plainText = Regex.Replace(tableOutput, @"\x1B\[[^@-~]*[@-~]", string.Empty);
 
         return plainText;
     }
@@ -526,7 +582,8 @@ public sealed class TextReportGenerator : ITextReportGenerator
     /// </summary>
     /// <param name="report">The StringBuilder to append to.</param>
     /// <param name="recommendations">The list of cycle-breaking recommendations ranked by priority.</param>
-    private void AppendRecommendations(StringBuilder report, IReadOnlyList<CycleBreakingSuggestion> recommendations)
+    /// <param name="writeToConsole">When true, also writes formatted tables to console using IAnsiConsole.</param>
+    private void AppendRecommendations(StringBuilder report, IReadOnlyList<CycleBreakingSuggestion> recommendations, bool writeToConsole = false)
     {
         report.AppendLine("CYCLE-BREAKING RECOMMENDATIONS");
         report.AppendLine(new string('=', ReportWidth));
@@ -546,10 +603,10 @@ public sealed class TextReportGenerator : ITextReportGenerator
         // Create table for recommendations
         var recommendationsTable = new Table();
         recommendationsTable.Border(TableBorder.Ascii);
-        recommendationsTable.AddColumn(new TableColumn("Rank").RightAligned());
-        recommendationsTable.AddColumn("Break Edge");
-        recommendationsTable.AddColumn(new TableColumn("Coupling").RightAligned());
-        recommendationsTable.AddColumn("Rationale");
+        recommendationsTable.AddColumn(new TableColumn("Rank").RightAligned().Width(6));
+        recommendationsTable.AddColumn(new TableColumn("Break Edge").Width(35));  // Support long project names
+        recommendationsTable.AddColumn(new TableColumn("Coupling").RightAligned().Width(10));
+        recommendationsTable.AddColumn(new TableColumn("Rationale").Width(25));  // Constrain to prevent overflow
 
         foreach (var recommendation in topRecommendations)
         {
@@ -566,6 +623,18 @@ public sealed class TextReportGenerator : ITextReportGenerator
         // Render table to plain text and append to report
         var recommendationsTableText = RenderTableToPlainText(recommendationsTable);
         report.Append(recommendationsTableText);
+
+        // Story 5.8 AC: Render to console when --verbose mode enabled
+        if (writeToConsole)
+        {
+            _ansiConsole.WriteLine();
+            _ansiConsole.MarkupLine("[bold]CYCLE-BREAKING RECOMMENDATIONS[/]");
+            _ansiConsole.WriteLine();
+            _ansiConsole.WriteLine("Top 5 prioritized actions to reduce circular dependencies:");
+            _ansiConsole.WriteLine();
+            _ansiConsole.Write(recommendationsTable);
+            _ansiConsole.WriteLine();
+        }
 
         // Section closing
         report.AppendLine();

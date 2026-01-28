@@ -437,6 +437,61 @@ public class Program
                     }
                 }
 
+                // Generate reports based on --reports flag
+                var shouldGenerateText = reports == "text" || reports == "all";
+                var shouldGenerateCsv = reports == "csv" || reports == "all";
+
+                // Calculate extraction scores for reporting (Epic 4 integration)
+                IReadOnlyList<ExtractionScore>? extractionScores = null;
+                if (shouldGenerateText || shouldGenerateCsv)
+                {
+                    ansiConsole.MarkupLine("[cyan]Calculating extraction difficulty scores...[/]");
+                    var extractionScoreCalculator = serviceProvider.GetRequiredService<IExtractionScoreCalculator>();
+                    extractionScores = await extractionScoreCalculator.CalculateForAllProjectsAsync(filteredGraph, cancellationToken);
+                    ansiConsole.MarkupLine($"[green]✓[/] Calculated extraction scores for {extractionScores.Count} projects");
+                }
+
+                // Generate text report (Story 5.1-5.8)
+                if (shouldGenerateText)
+                {
+                    ansiConsole.MarkupLine("[cyan]Generating text report...[/]");
+                    var textReportGenerator = serviceProvider.GetRequiredService<ITextReportGenerator>();
+                    var reportPath = await textReportGenerator.GenerateAsync(
+                        filteredGraph,
+                        outputDir,
+                        solutionName,
+                        cycles: cycles.Count > 0 ? cycles : null,
+                        extractionScores: extractionScores,
+                        recommendations: recommendations,
+                        writeToConsole: verbose,
+                        cancellationToken);
+                    ansiConsole.MarkupLine($"[green]✓[/] Generated text report: {Path.GetFileName(reportPath)}");
+                }
+
+                // Generate CSV exports (Stories 5.5-5.7)
+                if (shouldGenerateCsv && extractionScores != null)
+                {
+                    var csvExporter = serviceProvider.GetRequiredService<ICsvExporter>();
+
+                    // Export extraction scores
+                    ansiConsole.MarkupLine("[cyan]Exporting extraction scores to CSV...[/]");
+                    var scoresPath = await csvExporter.ExportExtractionScoresAsync(extractionScores, outputDir, solutionName, cancellationToken);
+                    ansiConsole.MarkupLine($"[green]✓[/] Exported extraction scores: {Path.GetFileName(scoresPath)}");
+
+                    // Export cycle analysis if cycles exist
+                    if (cycles.Count > 0 && recommendations != null)
+                    {
+                        ansiConsole.MarkupLine("[cyan]Exporting cycle analysis to CSV...[/]");
+                        var cyclesPath = await csvExporter.ExportCycleAnalysisAsync(cycles, recommendations, outputDir, solutionName, cancellationToken);
+                        ansiConsole.MarkupLine($"[green]✓[/] Exported cycle analysis: {Path.GetFileName(cyclesPath)}");
+                    }
+
+                    // Export dependency matrix
+                    ansiConsole.MarkupLine("[cyan]Exporting dependency matrix to CSV...[/]");
+                    var matrixPath = await csvExporter.ExportDependencyMatrixAsync(filteredGraph, outputDir, solutionName, cancellationToken);
+                    ansiConsole.MarkupLine($"[green]✓[/] Exported dependency matrix: {Path.GetFileName(matrixPath)}");
+                }
+
                 ansiConsole.MarkupLine("");
                 ansiConsole.MarkupLine("[bold green]✓ Analysis complete![/]");
                 return 0;

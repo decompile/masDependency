@@ -19,6 +19,7 @@ public interface ITextReportGenerator
     /// <param name="cycles">Optional cycle detection results. If provided, includes Cycle Detection section (Story 5.2).</param>
     /// <param name="extractionScores">Optional extraction difficulty scores. If provided, includes Extraction Difficulty section (Story 5.3).</param>
     /// <param name="recommendations">Optional cycle-breaking recommendations. If provided, includes Recommendations section (Story 5.4).</param>
+    /// <param name="writeToConsole">When true, renders formatted tables to console output in addition to file. Enables --verbose mode support (Story 5.8 AC).</param>
     /// <param name="cancellationToken">Cancellation token for async operations.</param>
     /// <returns>Absolute path to the generated report file (e.g., "C:\output\MySolution-analysis-report.txt").</returns>
     /// <exception cref="ArgumentNullException">When graph, outputDirectory, or solutionName is null or empty.</exception>
@@ -31,5 +32,6 @@ public interface ITextReportGenerator
         IReadOnlyList<CycleInfo>? cycles = null,
         IReadOnlyList<ExtractionScore>? extractionScores = null,
         IReadOnlyList<CycleBreakingSuggestion>? recommendations = null,
+        bool writeToConsole = false,
         CancellationToken cancellationToken = default);
 }
