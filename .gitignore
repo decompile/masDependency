@@ -110,3 +110,4 @@ output/
 samples/sample-output/
 test-output/
 test-*/
+.claude/settings.local.json
