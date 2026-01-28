@@ -412,10 +412,22 @@ public class Program
                     ansiConsole.MarkupLine("[green]✓[/] No circular dependencies detected");
                 }
 
-                // Generate DOT file with cycle and recommendation highlighting
-                // Using default maxBreakPoints (10) to avoid visual clutter
-                // Extraction scores and score labels integration deferred to Epic 5 (Reporting)
-                var dotFilePath = await dotGenerator.GenerateAsync(filteredGraph, outputDir, solutionName, cycles, recommendations, maxBreakPoints: 10, extractionScores: null, showScoreLabels: false, cancellationToken);
+                // Calculate extraction scores once for both visualization and reporting (Epic 4)
+                ansiConsole.MarkupLine("[cyan]Calculating extraction difficulty scores...[/]");
+                var extractionScoreCalculator = serviceProvider.GetRequiredService<IExtractionScoreCalculator>();
+                var calculatedScores = await extractionScoreCalculator.CalculateForAllProjectsAsync(filteredGraph, cancellationToken);
+                ansiConsole.MarkupLine($"[green]✓[/] Calculated extraction scores for {calculatedScores.Count} projects");
+
+                // Generate DOT file with cycle highlighting, recommendations, heat map colors, and score labels
+                // Heat map: green=easy (0-33), yellow=medium (34-66), red=hard (67-100)
+                // Labels: Show extraction difficulty score on each node (Story 4.7-4.8)
+                var dotFilePath = await dotGenerator.GenerateAsync(
+                    filteredGraph, outputDir, solutionName,
+                    cycles, recommendations,
+                    maxBreakPoints: 10,
+                    extractionScores: calculatedScores,
+                    showScoreLabels: true,
+                    cancellationToken);
                 ansiConsole.MarkupLine($"[green]✓[/] Generated DOT file: {Path.GetFileName(dotFilePath)}");
 
                 // Render to image formats if Graphviz is available
@@ -441,16 +453,6 @@ public class Program
                 var shouldGenerateText = reports == "text" || reports == "all";
                 var shouldGenerateCsv = reports == "csv" || reports == "all";
 
-                // Calculate extraction scores for reporting (Epic 4 integration)
-                IReadOnlyList<ExtractionScore>? extractionScores = null;
-                if (shouldGenerateText || shouldGenerateCsv)
-                {
-                    ansiConsole.MarkupLine("[cyan]Calculating extraction difficulty scores...[/]");
-                    var extractionScoreCalculator = serviceProvider.GetRequiredService<IExtractionScoreCalculator>();
-                    extractionScores = await extractionScoreCalculator.CalculateForAllProjectsAsync(filteredGraph, cancellationToken);
-                    ansiConsole.MarkupLine($"[green]✓[/] Calculated extraction scores for {extractionScores.Count} projects");
-                }
-
                 // Generate text report (Story 5.1-5.8)
                 if (shouldGenerateText)
                 {
@@ -461,7 +463,7 @@ public class Program
                         outputDir,
                         solutionName,
                         cycles: cycles.Count > 0 ? cycles : null,
-                        extractionScores: extractionScores,
+                        extractionScores: calculatedScores,
                         recommendations: recommendations,
                         writeToConsole: verbose,
                         cancellationToken);
@@ -469,13 +471,13 @@ public class Program
                 }
 
                 // Generate CSV exports (Stories 5.5-5.7)
-                if (shouldGenerateCsv && extractionScores != null)
+                if (shouldGenerateCsv)
                 {
                     var csvExporter = serviceProvider.GetRequiredService<ICsvExporter>();
 
                     // Export extraction scores
                     ansiConsole.MarkupLine("[cyan]Exporting extraction scores to CSV...[/]");
-                    var scoresPath = await csvExporter.ExportExtractionScoresAsync(extractionScores, outputDir, solutionName, cancellationToken);
+                    var scoresPath = await csvExporter.ExportExtractionScoresAsync(calculatedScores, outputDir, solutionName, cancellationToken);
                     ansiConsole.MarkupLine($"[green]✓[/] Exported extraction scores: {Path.GetFileName(scoresPath)}");
 
                     // Export cycle analysis if cycles exist
