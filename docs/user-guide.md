@@ -2,17 +2,11 @@
 
 Complete command-line reference for masDependencyMap.
 
-**Documentation Status:** This guide documents the full planned feature set. Epic 1 (Foundation) is complete. Analysis features (Epics 2-6) are in development.
-
 ## Overview
 
 masDependencyMap is a .NET dependency analysis tool that helps architects and developers understand project dependencies, detect circular dependencies, and identify microservice extraction candidates.
 
-**Current Status:**
-- ✅ **Epic 1 Complete**: CLI foundation, configuration, logging
-- 🚧 **In Development**: Dependency graph generation, cycle detection, scoring (Epics 2-6)
-
-**When to Use This Tool (When Complete):**
+**When to Use This Tool:**
 - Analyzing legacy .NET solutions for refactoring opportunities
 - Detecting circular dependencies that block modularization
 - Planning microservice extraction from monolithic applications
@@ -75,13 +69,14 @@ Output directory for generated files.
 - **Example**: `--output ./analysis-results`
 - **Example**: `--output D:\Reports\DependencyAnalysis`
 
-**Generated Files (Planned - Epics 2-5):**
-- `{SolutionName}-dependencies.dot` - Graphviz DOT format (Epic 2)
-- `{SolutionName}-dependencies.png` - PNG visualization (Epic 2, if --format includes png)
-- `{SolutionName}-dependencies.svg` - SVG visualization (Epic 2, if --format includes svg)
-- `{SolutionName}-extraction-scores.csv` - Extraction difficulty scores (Epic 4-5)
-- `{SolutionName}-cycles.csv` - Circular dependency analysis (Epic 3-5)
-- `{SolutionName}-dependency-matrix.csv` - Full dependency matrix (Epic 2-5)
+**Generated Files:**
+- `{SolutionName}-dependencies.dot` - Graphviz DOT format with heat map colors and score labels
+- `{SolutionName}-dependencies.png` - PNG visualization (if --format includes png)
+- `{SolutionName}-dependencies.svg` - SVG visualization (if --format includes svg)
+- `{SolutionName}-analysis-report.txt` - Formatted text report with tables
+- `{SolutionName}-extraction-scores.csv` - Extraction difficulty scores
+- `{SolutionName}-cycle-analysis.csv` - Circular dependency analysis (if cycles detected)
+- `{SolutionName}-dependency-matrix.csv` - Full dependency matrix with coupling scores
 
 ##### --config <file>
 
@@ -91,9 +86,7 @@ Path to configuration file (filter-config.json or scoring-config.json).
 - **Required**: No
 - **Default**: Looks for `filter-config.json` and `scoring-config.json` in current directory
 - **Example**: `--config ./custom-filter-config.json`
-- **Status**: ⚠️ **Planned Feature** - Parameter is parsed but custom path override not yet implemented. Configuration files are currently loaded from current directory only.
-
-**Note:** If configuration files exist in the current directory, they are automatically loaded.
+- **Note**: Configuration files are automatically loaded from current directory if they exist
 
 ##### --reports <type>
 
@@ -334,11 +327,19 @@ Cycle detection completed: 0 cycles found
 - High-quality rendering at any zoom level
 - Suitable for web and print
 
-**Graph Legend:**
-- **Nodes**: Projects in the solution
-- **Edges**: Dependencies between projects
-- **Red Edges**: Part of circular dependencies
-- **Node Colors**: Heat map for extraction difficulty (if applicable)
+**Graph Features:**
+- **Nodes**: Projects in the solution with extraction scores as labels
+- **Node Colors**: Heat map for extraction difficulty
+  - Green (lightgreen): Easy extraction (scores 0-33)
+  - Yellow: Medium difficulty (scores 34-66)
+  - Red (lightcoral): Hard to extract (scores 67-100)
+- **Score Labels**: Each node displays `"ProjectName\nScore: 42"`
+- **Edge Colors**:
+  - Black: Normal dependencies
+  - Red: Circular dependencies
+  - Yellow: Recommended cycle-breaking points (top 10)
+  - Blue: Cross-solution dependencies (multi-solution analysis)
+- **Legends**: Automatic legends for extraction difficulty and dependency types
 
 #### CSV Exports
 
@@ -354,39 +355,62 @@ Extraction difficulty scores for each project.
 - `Tech Debt Score` - Framework version age
 - `External Exposure Score` - Public API surface area
 
-**{SolutionName}-cycles.csv**
+**{SolutionName}-cycle-analysis.csv**
 
-Circular dependency analysis.
+Circular dependency analysis (generated only if cycles detected).
 
 **Columns:**
 - `Cycle ID` - Unique identifier for each cycle
-- `Projects in Cycle` - Comma-separated project names
-- `Cycle Size` - Number of projects in cycle
-- `Recommended Break Point` - Weakest dependency to break cycle
+- `Size` - Number of projects in cycle
+- `Projects` - Comma-separated project names
+- `Suggested Break` - Recommended edge to break (`Source → Target`)
+- `Coupling` - Method call count for suggested break edge
+- `Rationale` - Explanation of why this break point is recommended
 
 **{SolutionName}-dependency-matrix.csv**
 
-Full project-to-project dependency matrix.
+Full project-to-project dependency matrix with coupling scores.
 
-**Format:**
-- Rows: Source projects
-- Columns: Target projects
-- Values: 1 if dependency exists, 0 otherwise
+**Columns:**
+- `Source Project` - Project with outgoing dependency
+- `Target Project` - Project being depended upon
+- `Coupling Score` - Number of method calls from source to target (when available)
+
+**Format:** RFC 4180 CSV with UTF-8 BOM for Excel compatibility, sorted by source then target project
 
 ### Text Reports
 
-Console output includes formatted tables using Spectre.Console:
+Text reports are saved to `{SolutionName}-analysis-report.txt` with formatted tables.
 
-**Project Summary Table:**
+**File Format:**
+- UTF-8 encoding without BOM
+- 80-character width for readability
+- Formatted using Spectre.Console Table (plain text ASCII art in file)
+
+**Report Sections:**
+
+1. **Header**: Solution name, analysis date (UTC), total projects
+2. **Dependency Overview**: Total references, framework/custom breakdown with percentages
+3. **Extraction Difficulty Scores**:
+   - Easiest Candidates (top 10 with lowest scores)
+   - Hardest Candidates (top 10 with highest scores)
+4. **Cycle Detection** (if cycles found): Total chains, participation %, largest cycle, detailed listing
+5. **Cycle-Breaking Recommendations** (if applicable): Top 5 suggestions with coupling and rationale
+
+**Example Table (Easiest Candidates):**
 ```
-┌────────────────────┬──────────────┬─────────────┐
-│ Project            │ Dependencies │ Dependents  │
-├────────────────────┼──────────────┼─────────────┤
-│ MyApp.Core         │ 0            │ 2           │
-│ MyApp.Services     │ 1            │ 1           │
-│ MyApp.Web          │ 2            │ 0           │
-└────────────────────┴──────────────┴─────────────┘
++------------------------------------------------------------------------------+
+|   Rank | Project Name           |   Score |   Incoming |   Outgoing |   APIs |
+|--------+------------------------+---------+------------+------------+--------|
+|      1 | Legacy.ModuleB         |       6 |          0 |          1 |      0 |
+|      2 | Legacy.ModuleA         |      11 |          1 |          0 |      0 |
+|      3 | UI                     |      21 |          0 |          4 |      0 |
++------------------------------------------------------------------------------+
 ```
+
+**Console Output with --verbose:**
+- Same formatted tables displayed in terminal with colors
+- Uses injected IAnsiConsole for proper rendering
 
 ## Error Handling
 

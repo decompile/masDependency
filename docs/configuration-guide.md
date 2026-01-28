@@ -23,7 +23,6 @@ masDependencyMap supports optional JSON configuration files for customizing anal
 1. **Default Values**: Hardcoded sensible defaults
 2. **filter-config.json**: Loaded if present in current directory
 3. **scoring-config.json**: Loaded if present in current directory
-4. **--config Override**: ⚠️ **Planned Feature** - Command-line flag will override default file location (not yet implemented)
 
 ### Validation
 
