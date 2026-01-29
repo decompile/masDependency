@@ -51,7 +51,30 @@ A .NET dependency analyzer that visualizes project dependencies, detects circula
 
 ## Installation
 
-### Build from Source
+### Option 1: Published Executable (Recommended)
+
+Publish as a standalone executable that doesn't require the .NET SDK:
+
+**Windows:**
+```powershell
+.\publish-win-x64.ps1
+cd publish\win-x64
+.\MasDependencyMap.CLI.exe --version
+```
+
+**Linux:**
+```bash
+chmod +x publish-linux-x64.sh
+./publish-linux-x64.sh
+cd publish/linux-x64
+./MasDependencyMap.CLI --version
+```
+
+See [Publishing Guide](docs/publishing-guide.md) for distribution and PATH setup.
+
+### Option 2: Build from Source
+
+For development or customization:
 
 ```bash
 # Navigate to the project directory

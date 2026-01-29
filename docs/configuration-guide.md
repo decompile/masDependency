@@ -233,10 +233,10 @@ Customizes weights for extraction difficulty scoring algorithm. The tool calcula
 ```json
 {
   "ScoringWeights": {
-    "Coupling": 0.40,
-    "Complexity": 0.25,
-    "TechDebt": 0.20,
-    "ExternalExposure": 0.15
+    "CouplingWeight": 0.40,
+    "ComplexityWeight": 0.25,
+    "TechDebtWeight": 0.20,
+    "ExternalExposureWeight": 0.15
   }
 }
 ```
@@ -382,10 +382,10 @@ Emphasize dependency coupling for microservice extraction planning:
 ```json
 {
   "ScoringWeights": {
-    "Coupling": 0.50,
-    "Complexity": 0.20,
-    "TechDebt": 0.15,
-    "ExternalExposure": 0.15
+    "CouplingWeight": 0.50,
+    "ComplexityWeight": 0.20,
+    "TechDebtWeight": 0.15,
+    "ExternalExposureWeight": 0.15
   }
 }
 ```
@@ -399,10 +399,10 @@ Emphasize framework version age for modernization planning:
 ```json
 {
   "ScoringWeights": {
-    "Coupling": 0.20,
-    "Complexity": 0.20,
-    "TechDebt": 0.50,
-    "ExternalExposure": 0.10
+    "CouplingWeight": 0.20,
+    "ComplexityWeight": 0.20,
+    "TechDebtWeight": 0.50,
+    "ExternalExposureWeight": 0.10
   }
 }
 ```
@@ -416,10 +416,10 @@ Equal consideration for all factors:
 ```json
 {
   "ScoringWeights": {
-    "Coupling": 0.25,
-    "Complexity": 0.25,
-    "TechDebt": 0.25,
-    "ExternalExposure": 0.25
+    "CouplingWeight": 0.25,
+    "ComplexityWeight": 0.25,
+    "TechDebtWeight": 0.25,
+    "ExternalExposureWeight": 0.25
   }
 }
 ```
@@ -433,10 +433,10 @@ Focus on code quality and API stability:
 ```json
 {
   "ScoringWeights": {
-    "Coupling": 0.15,
-    "Complexity": 0.40,
-    "TechDebt": 0.10,
-    "ExternalExposure": 0.35
+    "CouplingWeight": 0.15,
+    "ComplexityWeight": 0.40,
+    "TechDebtWeight": 0.10,
+    "ExternalExposureWeight": 0.35
   }
 }
 ```
@@ -581,10 +581,10 @@ Adjust weights so they sum to exactly 1.0:
 ```json
 {
   "ScoringWeights": {
-    "Coupling": 0.40,
-    "Complexity": 0.25,
-    "TechDebt": 0.20,
-    "ExternalExposure": 0.10  // Only adds to 0.95
+    "CouplingWeight": 0.40,
+    "ComplexityWeight": 0.25,
+    "TechDebtWeight": 0.20,
+    "ExternalExposureWeight": 0.10  // Only adds to 0.95
   }
 }
 ```
@@ -593,10 +593,10 @@ Adjust weights so they sum to exactly 1.0:
 ```json
 {
   "ScoringWeights": {
-    "Coupling": 0.40,
-    "Complexity": 0.25,
-    "TechDebt": 0.20,
-    "ExternalExposure": 0.15  // Now sums to 1.0
+    "CouplingWeight": 0.40,
+    "ComplexityWeight": 0.25,
+    "TechDebtWeight": 0.20,
+    "ExternalExposureWeight": 0.15  // Now sums to 1.0
   }
 }
 ```
@@ -657,10 +657,10 @@ If no configuration files are provided, these defaults are used:
 ```json
 {
   "ScoringWeights": {
-    "Coupling": 0.40,
-    "Complexity": 0.25,
-    "TechDebt": 0.20,
-    "ExternalExposure": 0.15
+    "CouplingWeight": 0.40,
+    "ComplexityWeight": 0.25,
+    "TechDebtWeight": 0.20,
+    "ExternalExposureWeight": 0.15
   }
 }
 ```
